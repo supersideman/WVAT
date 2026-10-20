@@ -20,6 +20,14 @@ desktop.ini
 .env
 *.key
 
+# 便携版编辑器（约 1GB 解压产物，不入库）
+tools/vscode-portable/
+
+# 下载缓存（安装包动辄几百 MB）
+downloads/*.zip
+downloads/*.exe
+downloads/*.log
+
 # 工作区里的临时/缓存目录（扫描时会因权限报错，直接忽略）
 tools/_tmp/
 tools/_pylibs/
