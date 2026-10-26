@@ -1,0 +1,8 @@
+<project name="wvat_ui" lvgl_version="9.5.0" theme="simple">
+  <!-- 手表分辨率。Editor 的预览面板会按这个尺寸渲染 -->
+  <targets>
+    <target name="watch">
+      <display width="240" height="280"/>
+    </target>
+  </targets>
+</project>

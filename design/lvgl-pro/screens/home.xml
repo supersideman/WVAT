@@ -1,0 +1,67 @@
+<screen permanent="true">
+  <!-- 主界面 B 版 · 结构骨架
+       坐标依据 design/UI设计规格.md §4.4
+       注意：这里只有「布局」，没有图标位图，视觉细节以 mockup 为准 -->
+
+  <view>
+    <lv_obj width="240" height="280">
+      <style name="s_bg"/>
+
+      <!-- 时钟 -->
+      <lv_label x="0" y="14" width="240" text="10:24">
+        <style name="s_time"/>
+      </lv_label>
+
+      <!-- 日期 -->
+      <lv_label x="0" y="74" width="240" text="10月20日 周一">
+        <style name="s_dim"/>
+      </lv_label>
+
+      <!-- 最近一次结果 -->
+      <lv_obj x="12" y="96" width="216" height="26">
+        <style name="s_card_flat"/>
+        <lv_label x="14" y="6" width="196" height="16" text="上次：已锁屏并静音">
+          <style name="s_dim"/>
+        </lv_label>
+      </lv_obj>
+
+      <!-- 4 个快捷格 -->
+      <lv_obj x="12" y="132" width="48" height="48">
+        <style name="s_card"/>
+        <lv_label x="0" y="30" width="48" text="放歌">
+          <style name="s_dim"/>
+        </lv_label>
+      </lv_obj>
+
+      <lv_obj x="68" y="132" width="48" height="48">
+        <style name="s_card"/>
+        <lv_label x="0" y="30" width="48" text="我困了">
+          <style name="s_dim"/>
+        </lv_label>
+      </lv_obj>
+
+      <lv_obj x="124" y="132" width="48" height="48">
+        <style name="s_card"/>
+        <lv_label x="0" y="30" width="48" text="资料">
+          <style name="s_dim"/>
+        </lv_label>
+      </lv_obj>
+
+      <lv_obj x="180" y="132" width="48" height="48">
+        <style name="s_card"/>
+        <lv_label x="0" y="30" width="48" text="更多">
+          <style name="s_accent"/>
+        </lv_label>
+      </lv_obj>
+
+      <!-- 大按钮：按住说话 -->
+      <lv_obj x="12" y="196" width="216" height="52">
+        <style name="s_talk_btn"/>
+        <lv_label x="0" y="18" width="216" text="按住说话">
+          <style name="s_accent"/>
+        </lv_label>
+      </lv_obj>
+
+    </lv_obj>
+  </view>
+</screen>

@@ -1,0 +1,45 @@
+<globals>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       字体注册
+       ⚠️ 需要先把一个中文字体文件放到 fonts/ 目录，例如：
+          fonts/simhei.ttf   （来自 C:\Windows\Fonts\simhei.ttf）
+       没有字体文件时，下面三行会让编辑器报错——要么放字体，
+       要么把整个 <fonts> 块注释掉（中文会显示成方框）。
+       symbols 只收录本 UI 实际用到的汉字，避免生成上万字形。
+       ══════════════════════════════════════════════════════════════ -->
+  <fonts>
+    <bin as_file="false" name="cn12" src_path="fonts/simhei.ttf"
+         size="12" bpp="4" range="0x20-0x7F"
+         symbols="上次已锁屏并静音放歌我困了资料更多按住说话月日周一全部意图下首量状态设置正在录请把语转成文字确认识别结果帮执行重完成失败网络未连接指令仍可用亮度蓝牙固件关于中秒返回…"/>
+
+    <bin as_file="false" name="cn16" src_path="fonts/simhei.ttf"
+         size="16" bpp="4" range="0x20-0x7F"
+         symbols="上次已锁屏并静音放歌我困了资料更多按住说话月日周一全部意图下首量状态设置正在录请把语转成文字确认识别结果帮执行重完成失败网络未连接指令仍可用亮度蓝牙固件关于中秒返回…"/>
+
+    <bin as_file="false" name="cn30" src_path="fonts/simhei.ttf"
+         size="30" bpp="4" range="0x30-0x3A"
+         symbols="月日周一"/>
+  </fonts>
+
+  <styles>
+    <!-- 全局配色：与 design/UI设计规格.md §2 一致 -->
+    <style name="s_bg" bg_color="0x0E1116"/>
+    <style name="s_card" bg_color="0x1B2129" radius="10"/>
+    <style name="s_card_flat" bg_color="0x1B2129" radius="8"/>
+    <style name="s_status_bar" bg_color="0x1B2129" radius="0"/>
+
+    <!-- 文字样式统一挂字体，页面里只引用样式名 -->
+    <style name="s_text" text_color="0xE8EDF2" text_font="cn16"/>
+    <style name="s_dim" text_color="0x8A96A3" text_font="cn12"/>
+    <style name="s_accent" text_color="0x35D0BA" text_font="cn16"/>
+    <style name="s_time" text_color="0xE8EDF2" text_font="cn30"/>
+    <style name="s_danger" text_color="0xFF5C5C" text_font="cn16"/>
+    <style name="s_warn" text_color="0xFFC24B" text_font="cn16"/>
+    <style name="s_info" text_color="0x4A9EFF" text_font="cn16"/>
+
+    <style name="s_talk_btn" bg_color="0x0A1218" radius="12"
+           border_color="0x35D0BA" border_width="2"/>
+  </styles>
+
+</globals>
