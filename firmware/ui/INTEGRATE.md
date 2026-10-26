@@ -24,6 +24,37 @@
 
 ---
 
+## 附A：`Wait for Pack Installer` 卡住的处理（2026-10-20 实际遇到）
+
+**现象**：打开 Keil 后弹 `Wait for Pack Installer ... Stop Waiting`，进度条不动。
+
+**诊断**（实测）：
+
+| 检查项 | 结果 |
+|---|---|
+| 已装器件包 | `ARM_Compiler`、`MDK-Middleware`、**`STM32F1xx_DFP`** |
+| `STM32F4xx_DFP` | ❌ **没有** |
+| `.Download` 目录 12 秒变化 | **0 KB** → 不是"在下"，是**连不上 keil.com 卡住** |
+
+**结论**：缺 STM32F4 器件包，而 Pack Installer 联网拉不下来。
+
+**解决（离线安装）**：
+
+1. 点 `Stop Waiting` 关掉对话框
+2. 用已下载的包（本仓库 `downloads/` 下）：
+   ```
+   downloads/Keil.STM32F4xx_DFP.3.1.1.pack      ← 1.99 MB，已校验是合法 zip（133 个文件）
+   ```
+   来源：`https://www.keil.com/pack/`（官方索引 pidx 里的当前版本 3.1.1）
+3. 安装：**uVision → Pack Installer → File → Import** → 选上面那个 `.pack`；或直接双击 `.pack`
+4. 重启 uVision，重新打开工程 → 不再弹窗
+
+> 为什么只有 1.99MB？新版 DFP 是"瘦包"：只带**器件描述 + 调试配置 + 烧录算法**，
+> 器件头文件和 HAL 早就在 CubeMX 工程的 `Drivers/` 里了。
+> 已确认包内含 **`CMSIS/Flash/STM32F4xx_512.FLM`** —— 正是 F411RE（512KB Flash）烧录要用的算法，够用。
+
+---
+
 ## 第 0 步：拿模板工程
 
 ```powershell

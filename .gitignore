@@ -33,3 +33,7 @@ tools/_tmp/
 tools/_pylibs/
 tools/_wheels/
 tools/preview/
+
+# downloads 只保留 .pack（离线器件包）
+downloads/*
+!downloads/*.pack
