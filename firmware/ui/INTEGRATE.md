@@ -85,23 +85,33 @@ ui_main.c
 
 > 想保留原界面做对照，就别删 `ui_HomePage` 相关代码，只把上面两行换掉即可。
 
-## 第 4 步：Keil 工程设置（**这一步最容易错**）
+## 第 4 步：Keil 工程设置（**已核实：全都不用改**）
 
-| 项 | 值 |
-|---|---|
-| Device | **STM32F411RE**（不是 CE/VE！） |
-| Target → Flash | 512KB（IROM1 起始 0x08000000） |
-| Debug → Use | **ST-Link Debugger** |
-| Debug → Settings → Port | **SW**（不要 JTAG，F411 这板没引 JTAG） |
-| Debug → Settings → SW Device | 能看到 **IDCODE** 就算通了 |
-| Reset and Run | ✅ 勾上，烧完自动跑 |
+打开了 `MDK-ARM/LCD.uvprojx` 实测，作者已经配好了：
 
-**⚠️ 还有一个必开项：C99**
+| 项 | 工程里的值 | 结论 |
+|---|---|---|
+| `<Device>` | **STM32F411RETx** | ✅ 芯片选对了 |
+| IROM | `0x8000000-0x807FFFF` = **512KB** | ✅ |
+| IRAM | `0x20000000-0x2001FFFF` = **128KB** | ✅ |
+| CLOCK | **25000000**（25MHz HSE） | ✅ 与 FryPi 板载晶振一致 |
+| `<uC99>` | **1**（已开启） | ✅ **不用手改 C99** |
 
-`Options for Target → C/C++ → Language Standard` 选 **C99**（或勾 `--c99`）。
+**所以第 4 步可以直接跳过**——打开工程，编译，烧。
 
-LVGL 8.2 的源码用到 C99 语法（复合字面量、`//` 注释混用等），Keil AC5 默认是 C90，
-**不开这一项会报几百个语法错误**，然后你会以为工程坏了。
+> 但 Debug 页面还是要自己确认一次：`Use: ST-Link Debugger` + `Port: SW` + `Reset and Run`。
+
+---
+
+## 第 4.5 步：模板自带界面长什么样（验收标准）
+
+读了 `User/GUI/screens/ui_HomePage.c`，模板自带的压根不是手表界面，而是**一个滑块 + 一个按钮**：
+
+- `ui_Slider1`：150×10，居中偏上
+- `ui_Button1`：100×50，居中偏下
+
+**所以烧完看到「一个横条 + 一个方块按钮」就是成功**，别以为烧错了。
+它不含中文、不含自定义字体，所以这一步不需要动 `lv_conf.h`。
 
 ## 第 5 步：**先烧原模板验证链路**
 
