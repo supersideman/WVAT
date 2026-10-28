@@ -17,6 +17,14 @@ extern "C" {
 lv_obj_t *ui_main_create(void);
 
 /**
+ * 意图回调：用户点了某个意图格 / 麦克风按钮时被调用
+ *  - 未注册：UI 只在本地更新回执条（无链路也能演示）
+ *  - 注册后：交给链路层发指令，等 PC 回执再更新回执条
+ */
+typedef void (*ui_intent_cb_t)(ui_icon_t kind);
+void ui_main_set_intent_cb(ui_intent_cb_t cb);
+
+/**
  * 更新「最近一次结果」回执（纯图标：意图图标 + 对勾/叉）
  * @param intent 刚执行完的意图图标
  * @param ok     true=成功（青色勾），false=失败（红色叉）

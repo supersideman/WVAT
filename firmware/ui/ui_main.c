@@ -24,6 +24,8 @@ static bool       s_res_ok = true;
 static lv_obj_t *s_res_slot_intent;   /* 左侧图标容器 */
 static lv_obj_t *s_res_slot_status;   /* 右侧状态容器 */
 
+static ui_intent_cb_t s_intent_cb = NULL;   /* 链路层注册的回调（可为空）*/
+
 /* ───────────────── 工具 ───────────────── */
 
 static lv_obj_t *box(lv_obj_t *parent, int x, int y, int w, int h, int radius,
@@ -70,19 +72,27 @@ static void make_pressable(lv_obj_t *o, lv_event_cb_t cb, void *user_data)
     if (cb) lv_obj_add_event_cb(o, cb, LV_EVENT_CLICKED, user_data);
 }
 
-/** 意图格被点击：把该意图记到回执条上（后续换成发 OV+AI= 指令） */
+/** 意图格被点击：如果有链路就交给它，否则本地演示 */
 static void on_tile_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
     ui_icon_t kind = (ui_icon_t)(intptr_t)lv_event_get_user_data(e);
-    ui_main_set_result(kind, true);
+    if (s_intent_cb) {
+        s_intent_cb(kind);      /* 真机：发指令，等回执再更新回执条 */
+    } else {
+        ui_main_set_result(kind, true);   /* 无链路：本地假回执，便于调试 UI */
+    }
 }
 
-/** 麦克风大按钮被点击：暂时只做一个可见反馈，P2 接录音 */
+/** 麦克风大按钮被点击 */
 static void on_talk_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_main_set_result(UI_ICON_MIC, true);
+    if (s_intent_cb) {
+        s_intent_cb(UI_ICON_MIC);
+    } else {
+        ui_main_set_result(UI_ICON_MIC, true);
+    }
 }
 
 /** 一个意图格：66×66 圆角卡片 + 居中图标（可点、有按下反馈） */
@@ -156,6 +166,11 @@ lv_obj_t *ui_main_create(void)
     lv_obj_set_style_border_width(btn, UI_BTN_BORDER + 1, LV_STATE_PRESSED);
 
     return s_scr;
+}
+
+void ui_main_set_intent_cb(ui_intent_cb_t cb)
+{
+    s_intent_cb = cb;
 }
 
 void ui_main_set_result(ui_icon_t intent, bool ok)
