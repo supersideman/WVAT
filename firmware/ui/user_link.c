@@ -100,6 +100,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 
 /* ═══════════════════════ LVGL 定时器轮询 ═══════════════════════ */
 
+/**
+ * USART1 中断入口
+ * ⚠️ CubeMX 生成的 stm32f4xx_it.c 里没有它（.ioc 里没勾 USART1 中断），
+ *    而它在本工程中没有重复定义，所以放在这里最干净——不动生成文件。
+ */
+void USART1_IRQHandler(void)
+{
+    HAL_UART_IRQHandler(&huart1);
+}
+
 /** 在 LVGL 任务上下文里跑，所以可以安全地动控件 */
 static void link_poll_timer(lv_timer_t *t)
 {
@@ -129,6 +139,12 @@ void link_init(void)
 
     /* 启动中断接收 */
     HAL_UART_Receive_IT(&huart1, &s_rx_byte, 1);
+
+    /* 使能 USART1 中断（CubeMX 没开，我们自己开）
+     * 优先级 5：不高于 configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY，
+     * 这样 ISR 里就算以后要调 FreeRTOS 的 FromISR 接口也安全 */
+    HAL_NVIC_SetPriority(USART1_IRQn, 5, 1);
+    HAL_NVIC_EnableIRQ(USART1_IRQn);
 
     /* 轮询回执，30ms 一次 */
     lv_timer_create(link_poll_timer, LINK_POLL_MS, NULL);
