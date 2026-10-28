@@ -7,11 +7,12 @@ $src  = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\fi
 
 if (-not (Test-Path $proj)) { throw "找不到工程：$proj" }
 
-# ── 1. 拷源文件 ─────────────────────────────────────────
-foreach ($f in @("user_link.h", "user_link.c")) {
-    Copy-Item (Join-Path $src $f) (Join-Path $proj "User\GUI") -Force
-}
-Write-Output "[1] user_link.h / user_link.c 已拷入 User\GUI\"
+# ── 1. 拷源文件（**全部** UI 源码）
+#     ⚠️ 教训：只拷 user_link.* 会让工程里的 ui_main.c 停留在旧版本，
+#        链接时报 “Undefined symbol ui_main_set_intent_cb”。所以一次拷全。
+$allsrc = Get-ChildItem $src -File | Where-Object { $_.Extension -in '.c', '.h' }
+$allsrc | Copy-Item -Destination (Join-Path $proj "User\GUI") -Force
+Write-Output ("[1] 已同步 {0} 个源文件到 User\GUI\" -f $allsrc.Count)
 
 # ── 2. 加进 uvprojx 的编译组 ────────────────────────────
 $uv = Join-Path $proj "MDK-ARM\LCD.uvprojx"
