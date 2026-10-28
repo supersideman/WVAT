@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file    ui_main.c
  * @brief   主界面（图形化版）· LVGL 8.2
  *

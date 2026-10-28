@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file    ui_icons.c
  * @brief   纯图元图标库实现 · LVGL 8.2
  *
@@ -39,9 +39,9 @@ static lv_obj_t *ring(lv_obj_t *p, int cx, int cy, int r, int w, uint32_t color)
     return o;
 }
 
-/* lv_line 的点数组必须是静态的（LVGL 不拷贝） */
-static lv_point_t s_tri[4];      /* 三角形 */
-static lv_point_t s_line2[2];    /* 两点线 */
+/* ⚠️ lv_line 保存的是**指针**，不会拷贝点数组。
+ * 所以每条线段都要有自己独立的静态数组——共用会导致后画的覆盖先画的
+ * （曾踩过：对勾最后只剩一笔）。以下每个图标函数内部的 static 数组互不影响。 */
 
 static lv_obj_t *polyline(lv_obj_t *p, lv_point_t *pts, uint16_t n,
                           int w, uint32_t color)
@@ -115,36 +115,38 @@ static void ic_mic(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 
 static void ic_next(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
+    static lv_point_t pts[4];        /* 本图标独占 */
     int h = px(s, 3, 5), w = px(s, 1, 3);
-    s_tri[0].x = cx - w;     s_tri[0].y = cy - h / 2;
-    s_tri[1].x = cx + w / 2; s_tri[1].y = cy;
-    s_tri[2].x = cx - w;     s_tri[2].y = cy + h / 2;
-    s_tri[3] = s_tri[0];
-    polyline(p, s_tri, 4, s / 10 > 1 ? s / 10 : 2, c);
+    pts[0].x = cx - w;     pts[0].y = cy - h / 2;
+    pts[1].x = cx + w / 2; pts[1].y = cy;
+    pts[2].x = cx - w;     pts[2].y = cy + h / 2;
+    pts[3] = pts[0];
+    polyline(p, pts, 4, s / 10 > 1 ? s / 10 : 2, c);
     put(p, cx + w / 2 + 2, cy - h / 2, s / 12 > 2 ? s / 12 : 2, h, 0, c);
 }
 
 static void ic_vol(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
-    int h = px(s, 1, 2);
-    s_tri[0].x = cx - px(s, 2, 5); s_tri[0].y = cy - px(s, 1, 8);
-    s_tri[1].x = cx - px(s, 1, 10); s_tri[1].y = cy;
-    s_tri[2].x = cx - px(s, 2, 5); s_tri[2].y = cy + px(s, 1, 8);
-    s_tri[3] = s_tri[0];
-    polyline(p, s_tri, 4, s / 10 > 1 ? s / 10 : 2, c);
+    static lv_point_t pts[4];        /* 本图标独占 */
+    pts[0].x = cx - px(s, 2, 5);  pts[0].y = cy - px(s, 1, 8);
+    pts[1].x = cx - px(s, 1, 10); pts[1].y = cy;
+    pts[2].x = cx - px(s, 2, 5);  pts[2].y = cy + px(s, 1, 8);
+    pts[3] = pts[0];
+    polyline(p, pts, 4, s / 10 > 1 ? s / 10 : 2, c);
     ring(p, cx + px(s, 1, 6), cy, px(s, 1, 4), s / 12 > 1 ? s / 12 : 1, c);
 }
 
 static void ic_mute(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
+    static lv_point_t a[2], b[2];    /* 两条独立线段 */
     ic_vol(p, cx - px(s, 1, 10), cy, s, c);
     int d = px(s, 1, 4), o = s / 12 > 1 ? s / 12 : 2;
-    s_line2[0].x = cx + px(s, 1, 6) - d; s_line2[0].y = cy - d;
-    s_line2[1].x = cx + px(s, 1, 6) + d; s_line2[1].y = cy + d;
-    polyline(p, s_line2, 2, o, c);
-    s_line2[0].x = cx + px(s, 1, 6) + d; s_line2[0].y = cy - d;
-    s_line2[1].x = cx + px(s, 1, 6) - d; s_line2[1].y = cy + d;
-    polyline(p, s_line2, 2, o, c);
+    a[0].x = cx + px(s, 1, 6) - d; a[0].y = cy - d;
+    a[1].x = cx + px(s, 1, 6) + d; a[1].y = cy + d;
+    polyline(p, a, 2, o, c);
+    b[0].x = cx + px(s, 1, 6) + d; b[0].y = cy - d;
+    b[1].x = cx + px(s, 1, 6) - d; b[1].y = cy + d;
+    polyline(p, b, 2, o, c);
 }
 
 static void ic_list(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
@@ -178,23 +180,26 @@ static void ic_gear(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 
 static void ic_ok(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
-    s_line2[0].x = cx - px(s, 1, 3); s_line2[0].y = cy;
-    s_line2[1].x = cx - px(s, 1, 12); s_line2[1].y = cy + px(s, 1, 4);
-    polyline(p, s_line2, 2, s / 7 > 2 ? s / 7 : 3, c);
-    s_line2[0].x = cx - px(s, 1, 12); s_line2[0].y = cy + px(s, 1, 4);
-    s_line2[1].x = cx + px(s, 1, 3); s_line2[1].y = cy - px(s, 1, 3);
-    polyline(p, s_line2, 2, s / 7 > 2 ? s / 7 : 3, c);
+    static lv_point_t a[2], b[2];    /* 对勾的两笔，各自独立 */
+    int w = s / 7 > 2 ? s / 7 : 3;
+    a[0].x = cx - px(s, 1, 3);   a[0].y = cy;
+    a[1].x = cx - px(s, 1, 12);  a[1].y = cy + px(s, 1, 4);
+    polyline(p, a, 2, w, c);
+    b[0].x = cx - px(s, 1, 12);  b[0].y = cy + px(s, 1, 4);
+    b[1].x = cx + px(s, 1, 3);   b[1].y = cy - px(s, 1, 3);
+    polyline(p, b, 2, w, c);
 }
 
 static void ic_cross(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
+    static lv_point_t a[2], b[2];    /* 叉的两笔，各自独立 */
     int d = px(s, 1, 4), w = s / 7 > 2 ? s / 7 : 3;
-    s_line2[0].x = cx - d; s_line2[0].y = cy - d;
-    s_line2[1].x = cx + d; s_line2[1].y = cy + d;
-    polyline(p, s_line2, 2, w, c);
-    s_line2[0].x = cx + d; s_line2[0].y = cy - d;
-    s_line2[1].x = cx - d; s_line2[1].y = cy + d;
-    polyline(p, s_line2, 2, w, c);
+    a[0].x = cx - d; a[0].y = cy - d;
+    a[1].x = cx + d; a[1].y = cy + d;
+    polyline(p, a, 2, w, c);
+    b[0].x = cx + d; b[0].y = cy - d;
+    b[1].x = cx - d; b[1].y = cy + d;
+    polyline(p, b, 2, w, c);
 }
 
 /* ── 总入口 ───────────────────────────────────────────────── */
