@@ -4,7 +4,7 @@
 $ErrorActionPreference = 'Stop'
 
 $proj = "C:\Users\李思颉\Desktop\FryPi-master\FryPi-master\2.software\2.Advanced\6.LVGL-SmartWatch\LVGL_template"
-$src  = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\firmware\ui"
+$src  = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\firmware\ui"
 $bak  = Join-Path $proj "_backup_before_ui"
 
 if (-not (Test-Path $proj)) { throw "找不到工程目录：$proj" }

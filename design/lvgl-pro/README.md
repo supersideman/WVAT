@@ -1,4 +1,4 @@
-# LVGL Pro 项目骨架（v1 · 已加中文字体注册）
+﻿# LVGL Pro 项目骨架（v1 · 已加中文字体注册）
 
 ## 一、先解决中文方框（30 秒）
 
@@ -7,8 +7,8 @@
 **手动复制**（我这边命令行暂时坏了，跑不了）：
 
 ```powershell
-New-Item -ItemType Directory -Force "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\design\lvgl-pro\fonts" | Out-Null
-Copy-Item C:\Windows\Fonts\simhei.ttf "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\design\lvgl-pro\fonts\"
+New-Item -ItemType Directory -Force "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\design\lvgl-pro\fonts" | Out-Null
+Copy-Item C:\Windows\Fonts\simhei.ttf "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\design\lvgl-pro\fonts\"
 ```
 
 或者资源管理器里：`C:\Windows\Fonts` → 找 `simhei.ttf`（黑体）→ 复制到 `design\lvgl-pro\fonts\` 里。
