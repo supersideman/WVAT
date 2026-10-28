@@ -37,3 +37,25 @@ tools/preview/
 # downloads 只保留 .pack（离线器件包）
 downloads/*
 !downloads/*.pack
+
+# 与项目无关的本地工具/临时目录
+_tools/
+temp_*/
+
+# 工作区里与本项目无关的其它目录（防止 git add . 误提交）
+_tools/
+cpp-notes/
+eda-exam/
+resume/
+tmp/
+games/
+shots/
+preset-shushuyu/
+whale-pantsband-v2.png
+low-poly-cat.html
+ark-*.json
+ark-*.mjs
+asaread.js
+杂活台账.md
+tools/bili-ai-subtitle/
+ downloads/WeChatAgent/
