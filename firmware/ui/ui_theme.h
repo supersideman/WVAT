@@ -22,6 +22,7 @@
 #define UI_C_BTN        0x0A1218
 #define UI_C_TEXT       0xE8EDF2
 #define UI_C_DIM        0x5C6B7A   /* 图标常态色（比 v1 更暗，避免抢视线）*/
+#define UI_C_PRESSED    0x2E3947   /* 按下态：比卡片亮一档，做触摸反馈 */
 #define UI_C_ACCENT     0x35D0BA
 #define UI_C_DANGER     0xFF5C5C
 #define UI_C_WARN       0xFFC24B

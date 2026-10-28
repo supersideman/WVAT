@@ -13,9 +13,11 @@ if (-not (Test-Path $proj)) { throw "找不到工程目录：$proj" }
 New-Item -ItemType Directory -Force $bak | Out-Null
 foreach ($f in @("User\GUI\ui.c", "Middlewares\LVGL\lv_conf.h", "MDK-ARM\LCD.uvprojx")) {
     $p = Join-Path $proj $f
-    Copy-Item $p (Join-Path $bak (Split-Path $f -Leaf)) -Force
+    $target = Join-Path $bak (Split-Path $f -Leaf)
+    # ⚠️ 只在备份不存在时复制：重复运行时不能把"第一次的原始文件"覆盖成"改过的版本"
+    if (-not (Test-Path $target)) { Copy-Item $p $target -Force }
 }
-Write-Output "[0] 已备份 ui.c / lv_conf.h / LCD.uvprojx → _backup_before_ui\"
+Write-Output "[0] 备份就绪（已存在则不覆盖）→ _backup_before_ui\"
 
 # ── 1. 拷 UI 源文件 ─────────────────────────────────────
 $files = @("ui_theme.h", "ui_icons.h", "ui_icons.c", "ui_main.h", "ui_main.c")

@@ -53,12 +53,45 @@ static lv_obj_t *num_label(lv_obj_t *parent, int x, int y, int w,
     return l;
 }
 
-/** 一个意图格：66×66 圆角卡片 + 居中图标 */
+/* ───────────────── 触摸事件 ───────────────── */
+
+/* 前向声明：回调里要用 */
+static void on_tile_clicked(lv_event_t *e);
+
+/**
+ * 通用：让一个对象"按下去有反应"
+ * - 显式加 CLICKABLE（保险，base lv_obj 默认就有）
+ * - PRESSED 状态换背景色 → 手指按下立刻能看到
+ */
+static void make_pressable(lv_obj_t *o, lv_event_cb_t cb, void *user_data)
+{
+    lv_obj_add_flag(o, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(o, COL(UI_C_PRESSED), LV_STATE_PRESSED);
+    if (cb) lv_obj_add_event_cb(o, cb, LV_EVENT_CLICKED, user_data);
+}
+
+/** 意图格被点击：把该意图记到回执条上（后续换成发 OV+AI= 指令） */
+static void on_tile_clicked(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_icon_t kind = (ui_icon_t)(intptr_t)lv_event_get_user_data(e);
+    ui_main_set_result(kind, true);
+}
+
+/** 麦克风大按钮被点击：暂时只做一个可见反馈，P2 接录音 */
+static void on_talk_clicked(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_main_set_result(UI_ICON_MIC, true);
+}
+
+/** 一个意图格：66×66 圆角卡片 + 居中图标（可点、有按下反馈） */
 static lv_obj_t *tile(lv_obj_t *parent, int x, ui_icon_t kind, uint32_t color)
 {
     lv_obj_t *card = box(parent, x, UI_TILE_Y, UI_TILE_SIZE, UI_TILE_SIZE,
                          UI_TILE_RADIUS, UI_C_CARD, LV_OPA_COVER);
     ui_icon_draw(card, kind, UI_TILE_SIZE / 2, UI_ICON_CY, 30, color);
+    make_pressable(card, on_tile_clicked, (void *)(intptr_t)kind);
     return card;
 }
 
@@ -118,6 +151,9 @@ lv_obj_t *ui_main_create(void)
     lv_obj_set_style_border_color(btn, COL(UI_C_ACCENT), 0);
     lv_obj_set_style_border_width(btn, UI_BTN_BORDER, 0);
     ui_icon_draw(btn, UI_ICON_MIC, UI_BTN_W / 2, UI_BTN_H / 2, 34, UI_C_ACCENT);
+    /* 按下时：底色变亮 + 描边加粗，手指能明显感到"按到了" */
+    make_pressable(btn, on_talk_clicked, NULL);
+    lv_obj_set_style_border_width(btn, UI_BTN_BORDER + 1, LV_STATE_PRESSED);
 
     return s_scr;
 }
