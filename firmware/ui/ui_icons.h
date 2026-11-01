@@ -33,6 +33,7 @@ typedef enum {
     UI_ICON_GEAR,        /* 齿轮（设置）*/
     UI_ICON_OK,          /* 对勾 */
     UI_ICON_CROSS,       /* 叉 */
+    UI_ICON_BACK,        /* 返回箭头 < */
 } ui_icon_t;
 
 /**

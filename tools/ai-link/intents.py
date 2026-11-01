@@ -67,9 +67,14 @@ def _monitor_off() -> None:
 
 
 def _open_path(path: str) -> None:
+    """打开路径/网址。
+
+    手表上只有图标、没有输入框，所以 ARG 通常是空的 → 给个默认落点（桌面），
+    免得每次点「资料」都回一个"执行失败"。
+    """
     import os
     if not path:
-        raise ValueError("缺少路径参数")
+        path = os.path.join(os.path.expanduser("~"), "Desktop")
     if path.startswith(("http://", "https://")):
         os.startfile(path)  # type: ignore[attr-defined]
     elif os.path.exists(path):

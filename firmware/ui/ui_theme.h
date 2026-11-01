@@ -61,4 +61,19 @@
 #define UI_STATUS_H      44   /* 顶部状态区高度 */
 #define UI_HINT_H        36   /* 底部提示条高度 */
 
+/* ── 抽屉页（「更多」：9 个意图摊开）───────────────────── */
+#define UI_DRW_TOP_H     44   /* 顶部标题条（只放返回键，无文字）*/
+#define UI_DRW_X0        12
+#define UI_DRW_Y0        52
+#define UI_DRW_STEP_X    75   /* 66 宽 + 9 间距 */
+#define UI_DRW_STEP_Y    70   /* 60 高 + 10 间距 */
+#define UI_DRW_W         66
+#define UI_DRW_H         60
+#define UI_DRW_RADIUS    14
+#define UI_DRW_ICON_CY   30   /* 图标中心（相对格子上边）*/
+#define UI_DRW_ICON_SZ   28
+#define UI_BACK_X        10   /* 返回键 */
+#define UI_BACK_Y        8
+#define UI_BACK_SIZE     28
+
 #endif /* UI_THEME_H */

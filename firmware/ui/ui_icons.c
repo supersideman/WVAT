@@ -80,9 +80,14 @@ static void ic_moon(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 
 static void ic_folder(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
-    put(p, cx - px(s, 1, 2), cy - px(s, 1, 4), s, px(s, 3, 5), s / 12, c);   /* 主体 */
-    put(p, cx - px(s, 1, 2), cy - px(s, 1, 2) - px(s, 1, 8),
-        px(s, 2, 5), px(s, 1, 8), s / 14, c);                                /* 折页 */
+    int w = s;
+    int bh = px(s, 3, 5);
+    int tabh = px(s, 1, 8);
+    int bx = cx - px(s, 1, 2);
+    int by = cy - px(s, 1, 4);
+    put(p, bx, by, w, bh, s / 12, c);                    /* 主体 */
+    /* 页签必须紧贴主体上边，否则看起来像电池 */
+    put(p, bx, by - tabh, px(s, 2, 5), tabh, s / 14, c);
 }
 
 static void ic_grid(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
@@ -125,28 +130,40 @@ static void ic_next(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
     put(p, cx + w / 2 + 2, cy - h / 2, s / 12 > 2 ? s / 12 : 2, h, 0, c);
 }
 
-static void ic_vol(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
+/** 喇叭锥体：后板 + 3 级递增台阶（LVGL 没有填充三角图元） */
+static void vol_cone(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
-    static lv_point_t pts[4];        /* 本图标独占 */
-    pts[0].x = cx - px(s, 2, 5);  pts[0].y = cy - px(s, 1, 8);
-    pts[1].x = cx - px(s, 1, 10); pts[1].y = cy;
-    pts[2].x = cx - px(s, 2, 5);  pts[2].y = cy + px(s, 1, 8);
-    pts[3] = pts[0];
-    polyline(p, pts, 4, s / 10 > 1 ? s / 10 : 2, c);
-    ring(p, cx + px(s, 1, 6), cy, px(s, 1, 4), s / 12 > 1 ? s / 12 : 1, c);
+    int w = px(s, 1, 8);
+    int h = px(s, 1, 5);
+    int step = px(s, 1, 10);
+    int x0 = cx - px(s, 2, 5);
+
+    put(p, x0, cy - h, w, h * 2, 0, c);
+    for (int i = 0; i < 3; i++) {
+        int hh = h + step * (i + 1);
+        put(p, x0 + w + i * step, cy - hh, step + 1, hh * 2, 0, c);
+    }
 }
 
+/** 音量+：喇叭 + 加号 */
+static void ic_vol(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
+{
+    vol_cone(p, cx - px(s, 1, 10), cy, s, c);
+    int b = px(s, 1, 12) > 1 ? px(s, 1, 12) : 2;   /* 笔画粗 */
+    int L = px(s, 1, 4);                           /* 加号半长 */
+    int ax = cx + px(s, 1, 3);
+    put(p, ax - L, cy - b / 2, L * 2, b, 0, c);    /* 横 */
+    put(p, ax - b / 2, cy - L, b, L * 2, 0, c);    /* 竖 */
+}
+
+/** 音量−：喇叭 + 减号（对应 A05 音量减，不是"静音"） */
 static void ic_mute(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
-    static lv_point_t a[2], b[2];    /* 两条独立线段 */
-    ic_vol(p, cx - px(s, 1, 10), cy, s, c);
-    int d = px(s, 1, 4), o = s / 12 > 1 ? s / 12 : 2;
-    a[0].x = cx + px(s, 1, 6) - d; a[0].y = cy - d;
-    a[1].x = cx + px(s, 1, 6) + d; a[1].y = cy + d;
-    polyline(p, a, 2, o, c);
-    b[0].x = cx + px(s, 1, 6) + d; b[0].y = cy - d;
-    b[1].x = cx + px(s, 1, 6) - d; b[1].y = cy + d;
-    polyline(p, b, 2, o, c);
+    vol_cone(p, cx - px(s, 1, 10), cy, s, c);
+    int b = px(s, 1, 12) > 1 ? px(s, 1, 12) : 2;
+    int L = px(s, 1, 4);
+    int ax = cx + px(s, 1, 3);
+    put(p, ax - L, cy - b / 2, L * 2, b, 0, c);    /* 只有横线 */
 }
 
 static void ic_list(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
@@ -202,6 +219,20 @@ static void ic_cross(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
     polyline(p, b, 2, w, c);
 }
 
+/** 返回箭头 < ：两笔 */
+static void ic_back(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
+{
+    static lv_point_t a[2], b[2];
+    int w = s / 8 > 2 ? s / 8 : 2;
+    int d = px(s, 1, 4);
+    a[0].x = cx + d; a[0].y = cy - d;
+    a[1].x = cx - d; a[1].y = cy;
+    polyline(p, a, 2, w, c);
+    b[0].x = cx - d; b[0].y = cy;
+    b[1].x = cx + d; b[1].y = cy + d;
+    polyline(p, b, 2, w, c);
+}
+
 /* ── 总入口 ───────────────────────────────────────────────── */
 
 void ui_icon_draw(lv_obj_t *parent, ui_icon_t kind, int cx, int cy, int size,
@@ -220,6 +251,7 @@ void ui_icon_draw(lv_obj_t *parent, ui_icon_t kind, int cx, int cy, int size,
     case UI_ICON_GEAR:   ic_gear(parent, cx, cy, size, color);   break;
     case UI_ICON_OK:     ic_ok(parent, cx, cy, size, color);     break;
     case UI_ICON_CROSS:  ic_cross(parent, cx, cy, size, color);  break;
+    case UI_ICON_BACK:   ic_back(parent, cx, cy, size, color);   break;
     default: break;
     }
 }

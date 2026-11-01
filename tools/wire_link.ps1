@@ -18,21 +18,31 @@ Write-Output ("[1] 已同步 {0} 个源文件到 User\GUI\" -f $allsrc.Count)
 $uv = Join-Path $proj "MDK-ARM\LCD.uvprojx"
 $p = Get-Content $uv -Raw
 
-if ($p -match 'user_link\.c') {
-    Write-Output "[2] uvprojx: 已经在工程里，跳过"
+# 需要参与编译的 .c（新增文件必须列进来，否则 Keil 根本不会编它）
+$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c")
+
+$missing = @()
+foreach ($c in $needC) { if ($p -notmatch [regex]::Escape($c)) { $missing += $c } }
+
+if ($missing.Count -eq 0) {
+    Write-Output "[2] uvprojx: 需要编译的 .c 都在工程里，跳过"
 } else {
-    $pat = '(?s)<FileName>ui_icons\.c</FileName>\s*<FileType>1</FileType>\s*<FilePath>[^<]+</FilePath>\s*</File>'
-    $add = "`r`n            <File>`r`n              <FileName>user_link.c</FileName>`r`n              <FileType>1</FileType>`r`n              <FilePath>..\User\GUI\user_link.c</FilePath>`r`n            </File>"
+    $anchor = '(?s)<FileName>ui_icons\.c</FileName>\s*<FileType>1</FileType>\s*<FilePath>[^<]+</FilePath>\s*</File>'
+    $add = ""
+    foreach ($c in $missing) {
+        $add += "`r`n            <File>`r`n              <FileName>$c</FileName>`r`n              <FileType>1</FileType>`r`n              <FilePath>..\User\GUI\$c</FilePath>`r`n            </File>"
+    }
     $eval = [System.Text.RegularExpressions.MatchEvaluator] { param($m) return $m.Value + $add }
-    $p2 = [regex]::Replace($p, $pat, $eval, 1)
+    $p2 = [regex]::Replace($p, $anchor, $eval, 1)
+
     if ($p2 -eq $p) {
-        Write-Output "[2] ⚠️ 没找到 ui_icons.c 作锚点，需手动在 Keil 里添加"
+        Write-Output "[2] ⚠️ 没找到 ui_icons.c 作锚点，需手动在 Keil 里添加：$($missing -join ', ')"
     } else {
         Copy-Item $uv "$uv.bak_link" -Force
         Set-Content -Path $uv -Value $p2 -NoNewline
         try {
             [xml](Get-Content $uv -Raw) | Out-Null
-            Write-Output "[2] ✅ user_link.c 已加入编译组，XML 校验通过"
+            Write-Output ("[2] ✅ 已加入编译组：{0}（XML 校验通过）" -f ($missing -join ', '))
         } catch {
             Copy-Item "$uv.bak_link" $uv -Force
             throw "XML 被改坏，已还原：$($_.Exception.Message)"

@@ -33,11 +33,16 @@ static ui_icon_t  s_pending = UI_ICON_MUSIC;   /* 正在等回执的意图 */
 const char *link_code_of(ui_icon_t kind)
 {
     switch (kind) {
-    case UI_ICON_MUSIC: return "A01";   /* 放歌/暂停 */
-    case UI_ICON_MOON:  return "A03";   /* 我困了：锁屏+静音+关屏 */
-    case UI_ICON_GRID:  return "A07";   /* 查状态 */
-    case UI_ICON_MIC:   return "A08";   /* 语音（待接） */
-    default:            return "A07";
+    case UI_ICON_MUSIC:  return "A01";   /* 放歌/暂停 */
+    case UI_ICON_NEXT:   return "A02";   /* 下一首 */
+    case UI_ICON_MOON:   return "A03";   /* 我困了：锁屏+静音+关屏 */
+    case UI_ICON_VOL:    return "A04";   /* 音量+ */
+    case UI_ICON_MUTE:   return "A05";   /* 音量- */
+    case UI_ICON_FOLDER: return "A06";   /* 打开资料 */
+    case UI_ICON_LIST:   return "A07";   /* 查状态 */
+    case UI_ICON_GRID:   return "A07";   /* 兼容：老的主界面「更多」格 */
+    case UI_ICON_MIC:    return "A08";   /* 语音（待接） */
+    default:             return "A07";
     }
 }
 

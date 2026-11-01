@@ -8,6 +8,7 @@
 #include "ui_main.h"
 #include "ui_theme.h"
 #include "ui_icons.h"
+#include "ui_drawer.h"
 
 #define COL(c) lv_color_hex(c)
 
@@ -84,6 +85,13 @@ static void on_tile_clicked(lv_event_t *e)
     }
 }
 
+/** 点「更多」格：滑入抽屉页（不发送意图） */
+static void on_more_clicked(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_drawer_open();
+}
+
 /** 麦克风大按钮被点击 */
 static void on_talk_clicked(lv_event_t *e)
 {
@@ -102,6 +110,16 @@ static lv_obj_t *tile(lv_obj_t *parent, int x, ui_icon_t kind, uint32_t color)
                          UI_TILE_RADIUS, UI_C_CARD, LV_OPA_COVER);
     ui_icon_draw(card, kind, UI_TILE_SIZE / 2, UI_ICON_CY, 30, color);
     make_pressable(card, on_tile_clicked, (void *)(intptr_t)kind);
+    return card;
+}
+
+/** 「更多」格：外形一样，但点它是跳转而不是发意图 */
+static lv_obj_t *tile_more(lv_obj_t *parent, int x)
+{
+    lv_obj_t *card = box(parent, x, UI_TILE_Y, UI_TILE_SIZE, UI_TILE_SIZE,
+                         UI_TILE_RADIUS, UI_C_CARD, LV_OPA_COVER);
+    ui_icon_draw(card, UI_ICON_GRID, UI_TILE_SIZE / 2, UI_ICON_CY, 30, UI_C_ACCENT);
+    make_pressable(card, on_more_clicked, NULL);
     return card;
 }
 
@@ -153,7 +171,7 @@ lv_obj_t *ui_main_create(void)
     /* 3 个意图格 */
     tile(s_scr, UI_TILE_X0,                     UI_ICON_MUSIC,  UI_C_TEXT);
     tile(s_scr, UI_TILE_X0 + UI_TILE_STEP,      UI_ICON_MOON,   UI_C_TEXT);
-    tile(s_scr, UI_TILE_X0 + UI_TILE_STEP * 2,  UI_ICON_GRID,   UI_C_ACCENT);
+    tile_more(s_scr, UI_TILE_X0 + UI_TILE_STEP * 2);
 
     /* 麦克风大按钮（无文字） */
     lv_obj_t *btn = box(s_scr, UI_BTN_X, UI_BTN_Y, UI_BTN_W, UI_BTN_H,
@@ -171,6 +189,18 @@ lv_obj_t *ui_main_create(void)
 void ui_main_set_intent_cb(ui_intent_cb_t cb)
 {
     s_intent_cb = cb;
+}
+
+ui_intent_cb_t ui_main_get_intent_cb(void)
+{
+    return s_intent_cb;
+}
+
+void ui_main_show(void)
+{
+    if (!s_scr) return;
+    /* 从抽屉往回收：往右滑出 */
+    lv_scr_load_anim(s_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 200, 0, false);
 }
 
 void ui_main_set_result(ui_icon_t intent, bool ok)

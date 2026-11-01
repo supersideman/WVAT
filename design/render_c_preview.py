@@ -76,8 +76,10 @@ def ic_moon(d, cx, cy, s, col, card):
 
 
 def ic_folder(d, cx, cy, s, col):
-    put(d, cx - px(s, 1, 2), cy - px(s, 1, 4), s, px(s, 3, 5), s // 12, col)
-    put(d, cx - px(s, 1, 2), cy - px(s, 1, 2) - px(s, 1, 8), px(s, 2, 5), px(s, 1, 8), s // 14, col)
+    tabh = px(s, 1, 8)
+    bx, by = cx - px(s, 1, 2), cy - px(s, 1, 4)
+    put(d, bx, by, s, px(s, 3, 5), max(1, s // 12), col)
+    put(d, bx, by - tabh, px(s, 2, 5), tabh, max(1, s // 14), col)   # 页签紧贴主体
 
 
 def ic_grid(d, cx, cy, s, col):
@@ -113,13 +115,57 @@ def ic_cross(d, cx, cy, s, col):
     line(d, cx + dd, cy - dd, cx - dd, cy + dd, w, col)
 
 
+def vol_cone(d, cx, cy, s, col):
+    w, h, step = px(s, 1, 8), px(s, 1, 5), px(s, 1, 10)
+    x0 = cx - px(s, 2, 5)
+    put(d, x0, cy - h, w, h * 2, 0, col)
+    for i in range(3):
+        hh = h + step * (i + 1)
+        put(d, x0 + w + i * step, cy - hh, step + 1, hh * 2, 0, col)
+
+
 def ic_vol(d, cx, cy, s, col):
-    w = max(1, s // 10)
-    d.line([(cx - px(s, 2, 5)) * S, (cy - px(s, 1, 8)) * S,
-            (cx - px(s, 1, 10)) * S, cy * S,
-            (cx - px(s, 2, 5)) * S, (cy + px(s, 1, 8)) * S], fill=col, width=w * S)
-    d.arc([(cx + px(s, 1, 9)) * S, (cy - px(s, 1, 4)) * S,
-           (cx + px(s, 2, 5)) * S, (cy + px(s, 1, 4)) * S], -60, 60, fill=col, width=w * S)
+    """音量+：喇叭 + 加号"""
+    vol_cone(d, cx - px(s, 1, 10), cy, s, col)
+    b = max(2, px(s, 1, 12))
+    L = px(s, 1, 4)
+    ax = cx + px(s, 1, 3)
+    put(d, ax - L, cy - b // 2, L * 2, b, 0, col)
+    put(d, ax - b // 2, cy - L, b, L * 2, 0, col)
+
+
+def ic_next(d, cx, cy, s, col):
+    h, w = px(s, 3, 5), px(s, 1, 3)
+    lw = max(2, s // 10)
+    d.line([(cx - w) * S, (cy - h // 2) * S, (cx + w // 2) * S, cy * S,
+            (cx - w) * S, (cy + h // 2) * S, (cx - w) * S, (cy - h // 2) * S],
+           fill=col, width=lw * S)
+    put(d, cx + w // 2 + 2, cy - h // 2, max(2, s // 12), h, 0, col)
+
+
+def ic_mute(d, cx, cy, s, col):
+    """音量−：喇叭 + 减号"""
+    vol_cone(d, cx - px(s, 1, 10), cy, s, col)
+    b = max(2, px(s, 1, 12))
+    L = px(s, 1, 4)
+    ax = cx + px(s, 1, 3)
+    put(d, ax - L, cy - b // 2, L * 2, b, 0, col)
+
+
+def ic_list(d, cx, cy, s, col):
+    y0, dy = -px(s, 1, 4), px(s, 1, 4)
+    r = max(1, s // 12)
+    for i in range(3):
+        y = cy + y0 + i * dy
+        disc(d, cx - px(s, 2, 5), y, r, col)
+        put(d, cx - px(s, 1, 6), y - r // 2, px(s, 3, 5), max(2, r * 2), 0, col)
+
+
+def ic_back(d, cx, cy, s, col):
+    w = max(2, s // 8)
+    dd = px(s, 1, 4)
+    line(d, cx + dd, cy - dd, cx - dd, cy, w, col)
+    line(d, cx - dd, cy, cx + dd, cy + dd, w, col)
 
 
 # ── 页面 ───────────────────────────────────────────────
@@ -218,13 +264,57 @@ def draw_states() -> Image.Image:
     return sheet
 
 
+def draw_drawer() -> Image.Image:
+    """抽屉页：3×3 = 8 个意图 + 返回（与 ui_drawer.c 一一对应）"""
+    W, H = T["UI_W"], T["UI_H"]
+    img = Image.new("RGB", (W * S, H * S), c(T["UI_C_BG"]))
+    d = ImageDraw.Draw(img)
+
+    # 顶部细条
+    put(d, 0, 0, W, T["UI_DRW_TOP_H"], 0, c(T["UI_C_CARD"]))
+    ic_grid(d, 22, T["UI_DRW_TOP_H"] // 2, 22, c(T["UI_C_ACCENT"]))
+
+    # 8 个意图（顺序与 ui_drawer.c 的 k_items 一致）
+    items = [("music", T["UI_C_TEXT"]), ("next", T["UI_C_TEXT"]), ("moon", T["UI_C_TEXT"]),
+             ("vol", T["UI_C_TEXT"]), ("mute", T["UI_C_TEXT"]), ("folder", T["UI_C_TEXT"]),
+             ("list", T["UI_C_TEXT"]), ("mic", T["UI_C_ACCENT"]), ("back", T["UI_C_DIM"])]
+
+    for i, (kind, col) in enumerate(items):
+        col_i, row = i % 3, i // 3
+        x = T["UI_DRW_X0"] + col_i * T["UI_DRW_STEP_X"]
+        y = T["UI_DRW_Y0"] + row * T["UI_DRW_STEP_Y"]
+        put(d, x, y, T["UI_DRW_W"], T["UI_DRW_H"], T["UI_DRW_RADIUS"], c(T["UI_C_CARD"]))
+
+        cx, cy = x + T["UI_DRW_W"] // 2, y + T["UI_DRW_ICON_CY"]
+        s = T["UI_DRW_ICON_SZ"]
+        colr = c(col)
+        if kind == "music":
+            ic_music(d, cx, cy, s, colr)
+        elif kind == "next":
+            ic_next(d, cx, cy, s, colr)
+        elif kind == "moon":
+            ic_moon(d, cx, cy, s, colr, c(T["UI_C_CARD"]))
+        elif kind == "vol":
+            ic_vol(d, cx, cy, s, colr)
+        elif kind == "mute":
+            ic_mute(d, cx, cy, s, colr)
+        elif kind == "folder":
+            ic_folder(d, cx, cy, s, colr)
+        elif kind == "list":
+            ic_list(d, cx, cy, s, colr)
+        elif kind == "mic":
+            ic_mic(d, cx, cy, s, colr)
+        else:
+            ic_back(d, cx, cy, s, colr)
+    return img
+
+
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
-    home = draw_home()
-    home.save(os.path.join(OUT_DIR, "code-preview-home.png"))
-    st = draw_states()
-    st.save(os.path.join(OUT_DIR, "code-preview-states.png"))
-    print("已渲染：code-preview-home.png / code-preview-states.png")
+    draw_home().save(os.path.join(OUT_DIR, "code-preview-home.png"))
+    draw_states().save(os.path.join(OUT_DIR, "code-preview-states.png"))
+    draw_drawer().save(os.path.join(OUT_DIR, "code-preview-drawer.png"))
+    print("已渲染：code-preview-home.png / -states.png / -drawer.png")
     print(f"常量 {len(T)} 个，屏幕 {T['UI_W']}x{T['UI_H']}")
 
 

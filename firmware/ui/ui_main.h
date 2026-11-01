@@ -24,6 +24,12 @@ lv_obj_t *ui_main_create(void);
 typedef void (*ui_intent_cb_t)(ui_icon_t kind);
 void ui_main_set_intent_cb(ui_intent_cb_t cb);
 
+/** 取当前注册的意图回调（抽屉页要用；未注册返回 NULL） */
+ui_intent_cb_t ui_main_get_intent_cb(void);
+
+/** 切回主界面（从抽屉页返回时用） */
+void ui_main_show(void);
+
 /**
  * 更新「最近一次结果」回执（纯图标：意图图标 + 对勾/叉）
  * @param intent 刚执行完的意图图标
