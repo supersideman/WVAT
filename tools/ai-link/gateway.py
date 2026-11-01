@@ -48,6 +48,7 @@ class Gateway:
         self.ex = executor
         self.use_llm = use_llm
         self.dedup: "queue.OrderedDict[int, str]" = __import__("collections").OrderedDict()
+        self.last_req_id = 0        # 用于识别设备复位（REQ_ID 回退）
         self.missed_pong = 0
         self.last_ping = 0.0
         self.running = True
@@ -66,8 +67,10 @@ class Gateway:
                 self.last_ping = now
                 self.missed_pong += 1
                 if self.missed_pong > MAX_MISSED_PONG:
-                    print("[!] 心跳超时，判为掉线", flush=True)
+                    print("[!] 心跳超时，判为掉线 → 清空去重表（设备可能已复位）", flush=True)
                     self.missed_pong = 0
+                    self.dedup.clear()
+                    self.last_req_id = 0
             time.sleep(0.02)
 
     # ── 单帧处理 ────────────────────────────────────────────
@@ -89,6 +92,16 @@ class Gateway:
         t0 = time.time()
         req_id, code, arg = frame.req_id, frame.code, frame.arg
         print(f"← 收到 OV+AI={req_id},{code}{',' + arg if arg else ''}", flush=True)
+
+        # 设备复位检测：手表一上电 REQ_ID 就从 1 重新数，而网关还记着上一轮
+        # 的 1..N，会把全新的请求误判成"重传"、只回缓存不执行——指令被静默吞掉。
+        # 所以看到 REQ_ID 回退就清空去重表。
+        # （REQ_ID 是 uint8，255→1 的回绕也会触发一次，代价仅是可能重复执行一次，
+        #   可以接受；相比"吞指令"这个代价小得多。）
+        if req_id < self.last_req_id and self.dedup:
+            print("  [去重表] REQ_ID 回退 → 判定设备已复位，清空缓存", flush=True)
+            self.dedup.clear()
+        self.last_req_id = req_id
 
         cached = self.dedup.get(req_id)
         if cached is not None:
