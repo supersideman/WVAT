@@ -61,15 +61,15 @@ ui_stage（舞台，240×560 容器）
    ├─ user_link.c/h  USART1 协议收发（中断收帧 + lv_timer 轮询）
    └─ ui.c           ui_init(): ui_stage_init() + link_init()
 
-WVAT\firmware\ui\      以上文件的源版本（改动从这里同步过去）
-WVAT\tools\ai-link\    gateway.py / fake_watch.py / serial_log.py / intents.py
+WVAT\01_firmware\ui\      以上文件的源版本（改动从这里同步过去）
+WVAT\02_gateway\    gateway.py / fake_watch.py / serial_log.py / intents.py
 WVAT\tools\*.ps1       接入脚本（同步源码 + 改 uvprojx + 改 ui.c，带备份）
-WVAT\design\           render_c_preview.py（解析 ui_theme.h 出预览，图=代码）
+WVAT\03_design\           render_c_preview.py（解析 ui_theme.h 出预览，图=代码）
 ```
 
 **改完代码同步进工程**：
 ```powershell
-powershell -ExecutionPolicy Bypass -File WVAT\tools\wire_link.ps1
+powershell -ExecutionPolicy Bypass -File WVAT\05_scripts\wire_link.ps1
 ```
 
 ---
@@ -78,7 +78,7 @@ powershell -ExecutionPolicy Bypass -File WVAT\tools\wire_link.ps1
 
 | 坑 | 现象 | 解法 |
 |---|---|---|
-| **网关必须用户自己启动** | 播放/暂停、下一首点了没反应 | 代启的进程（沙箱/高权限宿主）**没有输入注入权限**：`SendInput` 返回 2 但输入进不了桌面。**必须用户在自己终端启动网关**：双击 `tools\ai-link\start_gateway.cmd` |
+| **网关必须用户自己启动** | 播放/暂停、下一首点了没反应 | 代启的进程（沙箱/高权限宿主）**没有输入注入权限**：`SendInput` 返回 2 但输入进不了桌面。**必须用户在自己终端启动网关**：双击 `02_gateway\start_gateway.cmd` |
 | **音量别用模拟按键** | 音量键时灵时不灵、无法验证 | 改用 CoreAudio 直接设音量（`audio_win.py`），能回读百分比，回执带真实数字 |
 | **`.cmd` 必须 CRLF + ASCII** | 双击窗口一闪就退，报 `'le' is not recognized` | 批处理文件必须 **CRLF 换行 + 纯 ASCII**；LF 会被 cmd 拆错行 |
 | 中文注释吞行 | 宏"未声明"、编译莫名失败 | 源文件必须 **UTF-8 带 BOM**；编辑工具会剥 BOM，改完要补 |
@@ -116,7 +116,7 @@ powershell -ExecutionPolicy Bypass -File WVAT\tools\wire_link.ps1
 **日常用法：双击这个就行**
 
 ```
-WVAT\tools\ai-link\start_gateway.cmd
+WVAT\02_gateway\start_gateway.cmd
 ```
 
 它会自动找 CH340 串口、以真执行模式启动。**必须由你自己双击**（见坑清单第一条：代启进程没有输入注入权限）。
@@ -131,8 +131,8 @@ cd WVAT; git log --oneline; git tag -l
 [System.IO.Ports.SerialPort]::GetPortNames()
 
 # 3. 手动启网关（真执行）
-$env:PYTHONPATH="C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\tools\_pylibs"
-python WVAT\tools\ai-link\gateway.py --transport serial --serial-port COM13 --enable-actions
+$env:PYTHONPATH="C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\vendor\_pylibs"
+python WVAT\02_gateway\gateway.py --transport serial --serial-port COM13 --enable-actions
 
 # 4. 只演练不动系统：去掉 --enable-actions
 # 5. 用启动器演练：start_gateway.cmd dry

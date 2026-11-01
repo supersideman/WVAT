@@ -1,61 +1,62 @@
-# 抓取临时件：全部可从原始仓库重新获取（STL / PDF / xlsx / html）
-research/_raw/
+# ══════════════════════════════════════════════════════════
+#  WVAT 项目 .gitignore
+#  原则：源码与文档入库；编译产物、依赖包、原始资料不入库
+# ══════════════════════════════════════════════════════════
 
-# 实验数据：跑一次就重新生成，不入库（要归档请单独放 data/）
-tools/ai-link/latency.csv
+# ── Keil / ARMCC 编译产物（约 100MB，可完全重建）──────────
+01_firmware/keil/**/MDK-ARM/output/
+01_firmware/keil/**/Objects/
+01_firmware/keil/**/Listings/
+01_firmware/keil/**/DebugConfig/
+01_firmware/keil/**/RTE/
+01_firmware/keil/**/*.o
+01_firmware/keil/**/*.d
+01_firmware/keil/**/*.crf
+01_firmware/keil/**/*.dep
+01_firmware/keil/**/*.lnp
+01_firmware/keil/**/*.axf
+01_firmware/keil/**/*.map
+01_firmware/keil/**/*.hex
+01_firmware/keil/**/*.bin
+01_firmware/keil/**/*.htm
+01_firmware/keil/**/*.uvguix.*
+01_firmware/keil/**/JLinkLog.txt
+01_firmware/keil/**/*.bak_*
 
-# Python
+# ── 依赖包 ──────────────────────────────────────────────
+vendor/_pylibs/
+vendor/_wheels/
+vendor/*.whl
+vendor/*.zip
+vendor/*.exe
+
+# 离线器件包保留（Keil 装 STM32F4 支持包用）
+!vendor/*.pack
+
+# ── 原始资料（4MB+，可从公开链接重新获取）────────────────
+04_docs/_raw/
+
+# ── 运行产物 ────────────────────────────────────────────
+02_gateway/__pycache__/
+02_gateway/latency.csv
+
+# ── Python ─────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 
-# 编辑器 / 系统
+# ── 编辑器 / 系统 ────────────────────────────────────────
 .vscode/
 .idea/
 Thumbs.db
 desktop.ini
 
-# 本地密钥（DeepSeek key 等，绝不入库）
+# ── 本地密钥（绝不入库）────────────────────────────────
 .env
 *.key
 
-# 便携版编辑器（约 1GB 解压产物，不入库）
-tools/vscode-portable/
-
-# 下载缓存（安装包动辄几百 MB）
-downloads/*.zip
-downloads/*.exe
-downloads/*.log
-
-# 工作区里的临时/缓存目录（扫描时会因权限报错，直接忽略）
-tools/_tmp/
-tools/_pylibs/
-tools/_wheels/
-tools/preview/
-
-# downloads ֻ���� .pack��������������
-downloads/*
-!downloads/*.pack
-
-# ����Ŀ�޹صı��ع���/��ʱĿ¼
-_tools/
+# ── 临时文件 ────────────────────────────────────────────
+_tmp_*
 temp_*/
-
-# ���������뱾��Ŀ�޹ص�����Ŀ¼����ֹ git add . ���ύ��
-_tools/
-cpp-notes/
-eda-exam/
-resume/
-tmp/
-games/
 shots/
-preset-shushuyu/
-whale-pantsband-v2.png
-low-poly-cat.html
-ark-*.json
-ark-*.mjs
-asaread.js
-�ӻ�̨��.md
-tools/bili-ai-subtitle/
- downloads/WeChatAgent/
