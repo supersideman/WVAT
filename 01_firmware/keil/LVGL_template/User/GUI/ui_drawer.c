@@ -71,7 +71,13 @@ static void slot(lv_obj_t **out, lv_obj_t *parent, int x, int y, int size)
 
 /**
  * 重画顶部小反馈：左边意图图标，右边一个结果圆点
- * state: -1 等待（无点）、0 失败（红点）、1 成功（绿点）
+ *
+ * 三种状态在视觉上必须一眼可分：
+ *   state = -1  已发出、等回执 → **淡灰点**（说明"点到了、发出去了"）
+ *   state =  0  失败 / 超时    → 红点
+ *   state =  1  成功           → 绿点
+ *
+ * 之前等待态是完全不显示点，导致"刚点下"几乎没有可见反馈，容易以为没点上。
  */
 static void fb_repaint(ui_icon_t kind, int state)
 {
@@ -82,13 +88,10 @@ static void fb_repaint(ui_icon_t kind, int state)
                  FB_ICON_SZ, state < 0 ? UI_C_DIM : UI_C_TEXT);
 
     if (!s_fb_dot) return;
-    if (state < 0) {
-        lv_obj_set_style_bg_opa(s_fb_dot, LV_OPA_TRANSP, 0);   /* 等待中：不显示点 */
-    } else {
-        lv_obj_set_style_bg_color(s_fb_dot,
-                                  COL(state ? UI_C_ACCENT : UI_C_DANGER), 0);
-        lv_obj_set_style_bg_opa(s_fb_dot, LV_OPA_COVER, 0);
-    }
+    uint32_t dot_color = (state < 0) ? UI_C_DIM
+                       : (state ? UI_C_ACCENT : UI_C_DANGER);
+    lv_obj_set_style_bg_color(s_fb_dot, COL(dot_color), 0);
+    lv_obj_set_style_bg_opa(s_fb_dot, LV_OPA_COVER, 0);
 }
 
 /** 超时守卫：常驻 200ms 轮询，靠 flag 判断，避免反复建/删定时器 */
