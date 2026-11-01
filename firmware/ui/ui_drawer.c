@@ -52,14 +52,14 @@ static void on_intent_clicked(lv_event_t *e)
     } else {
         ui_main_set_result(kind, true);   /* 无链路：本地假回执 */
     }
-    ui_main_show();               /* 回主界面看结果 */
+    ui_main_show(LV_SCR_LOAD_ANIM_MOVE_RIGHT);   /* 回主界面看结果 */
 }
 
 /** 点了返回 */
 static void on_back_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_main_show();
+    ui_main_show(LV_SCR_LOAD_ANIM_MOVE_RIGHT);
 }
 
 /* ───────────────── 构建 ───────────────── */

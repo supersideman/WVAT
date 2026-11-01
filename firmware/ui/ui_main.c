@@ -196,11 +196,10 @@ ui_intent_cb_t ui_main_get_intent_cb(void)
     return s_intent_cb;
 }
 
-void ui_main_show(void)
+void ui_main_show(lv_scr_load_anim_t anim)
 {
-    if (!s_scr) return;
-    /* 从抽屉往回收：往右滑出 */
-    lv_scr_load_anim(s_scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 200, 0, false);
+    if (!s_scr) ui_main_create();     /* 开机先进锁屏，主界面按需创建 */
+    lv_scr_load_anim(s_scr, anim, 220, 0, false);
 }
 
 void ui_main_set_result(ui_icon_t intent, bool ok)

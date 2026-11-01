@@ -76,4 +76,10 @@
 #define UI_BACK_Y        8
 #define UI_BACK_SIZE     28
 
+/* ── 锁屏页 ───────────────────────────────────────────── */
+#define UI_LOCK_TIME_Y   96    /* 大时钟文字顶边 */
+#define UI_LOCK_DATE_Y   152
+#define UI_LOCK_SWIPE_PX 30    /* 上滑多少像素算解锁（CST816 采样率低，阈值放宽 */
+#define UI_LOCK_HOLD_MS  1200  /* 长按兜底解锁（防手势失效被卡在锁屏）*/
+
 #endif /* UI_THEME_H */
