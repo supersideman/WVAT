@@ -10,6 +10,16 @@
 #include "ui_main.h"
 #include "ui_theme.h"
 
+/* 调试开关：把内部状态从 USART1 打出来（printf 已在 usart.c 重定向）
+ * 排查完把它改成 0 即可彻底关掉。 */
+#define UI_STAGE_DEBUG 1
+#if UI_STAGE_DEBUG
+#include <stdio.h>
+#define DBG(...)  printf(__VA_ARGS__)
+#else
+#define DBG(...)  do {} while (0)
+#endif
+
 #define COL(c) lv_color_hex(c)
 
 #define STAGE_H   (UI_H * 2)
@@ -29,6 +39,7 @@ static void stage_set_y(int y)
     if (y > 0) y = 0;
     if (y < -UI_H) y = -UI_H;
     lv_obj_set_y(s_stage, y);
+    DBG("[stage] set_y=%d (readback=%d)\r\n", y, (int)lv_obj_get_y(s_stage));
 }
 
 static void anim_cb(void *var, int32_t v)
@@ -146,6 +157,17 @@ void ui_stage_init(void)
 
     s_unlocked = false;
     stage_set_y(0);
+
+    /* 关键几何信息，烧录后从串口一眼看出尺寸/位置是否被改掉 */
+    DBG("\r\n[stage] === init done ===\r\n");
+    DBG("[stage] screen: w=%d h=%d\r\n",
+        (int)lv_obj_get_width(s_root), (int)lv_obj_get_height(s_root));
+    DBG("[stage] stage : x=%d y=%d w=%d h=%d\r\n",
+        (int)lv_obj_get_x(s_stage), (int)lv_obj_get_y(s_stage),
+        (int)lv_obj_get_width(s_stage), (int)lv_obj_get_height(s_stage));
+    DBG("[stage] lock  : x=%d y=%d w=%d h=%d\r\n",
+        (int)lv_obj_get_x(s_lock), (int)lv_obj_get_y(s_lock),
+        (int)lv_obj_get_width(s_lock), (int)lv_obj_get_height(s_lock));
 }
 
 lv_obj_t *ui_stage_screen(void)
@@ -165,8 +187,10 @@ void ui_stage_snap_home(void)
 
 void ui_stage_show_home(lv_scr_load_anim_t anim)
 {
+    DBG("[stage] show_home: anim=%d, 切换前 y=%d\r\n", (int)anim, (int)lv_obj_get_y(s_stage));
     ui_stage_snap_home();                     /* 先摆到"已解锁"位置，再切屏 */
     lv_scr_load_anim(ui_stage_screen(), anim, 220, 0, false);
+    DBG("[stage] show_home: 切屏后 y=%d\r\n", (int)lv_obj_get_y(s_stage));
 }
 
 void ui_stage_lock(bool animate)
