@@ -170,9 +170,10 @@ void ui_main_build(lv_obj_t *parent)
                             UI_C_CARD, LV_OPA_TRANSP);
     result_repaint();
 
-    /* 3 个意图格 */
-    tile(s_scr, UI_TILE_X0,                     UI_ICON_MUSIC,  UI_C_TEXT);
-    tile(s_scr, UI_TILE_X0 + UI_TILE_STEP,      UI_ICON_MOON,   UI_C_TEXT);
+    /* 3 个意图格：只放最常用的两个 + 「更多」
+       （拓展指令都在抽屉里，避免和抽屉重复）*/
+    tile(s_scr, UI_TILE_X0,                     UI_ICON_MUSIC,  UI_C_TEXT);  /* A01 播放/暂停 */
+    tile(s_scr, UI_TILE_X0 + UI_TILE_STEP,      UI_ICON_NEXT,   UI_C_TEXT);  /* A02 下一首 */
     tile_more(s_scr, UI_TILE_X0 + UI_TILE_STEP * 2);
 
     /* 麦克风大按钮（无文字） */
@@ -210,6 +211,9 @@ void ui_main_set_result(ui_icon_t intent, bool ok)
     s_res_ok = ok;
     s_res_intent_col = ok ? UI_C_TEXT : UI_C_DIM;
     result_repaint();
+
+    /* 抽屉可能正开着：把回执也送到它顶部的小反馈槽 */
+    ui_drawer_set_result(intent, ok);
 }
 
 void ui_main_set_time(const char *time_str, const char *date_str)

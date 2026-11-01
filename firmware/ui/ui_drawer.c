@@ -1,6 +1,12 @@
 ﻿/**
  * @file    ui_drawer.c
  * @brief   抽屉页实现 · LVGL 8.2
+ *
+ * 设计约定（v5）
+ * - 主界面已经有「播放/暂停」「下一首」，抽屉只放**拓展指令**，不重复
+ * - 抽屉为 3 列 × 2 行 = 6 格
+ * - 点指令后**留在抽屉**，不跳回主界面；反馈显示在顶部条右侧的小槽里
+ * - 返回键固定在顶部条左侧
  */
 #include "ui_drawer.h"
 
@@ -13,9 +19,13 @@
 
 #define COL(c) lv_color_hex(c)
 
-static lv_obj_t *s_drawer = NULL;
+#define FB_ICON_SZ 18
 
-/* ───────────────── 工具（与 ui_main 同款风格）───────────────── */
+static lv_obj_t *s_drawer   = NULL;
+static lv_obj_t *s_fb_intent = NULL;   /* 顶部反馈槽：意图图标 */
+static lv_obj_t *s_fb_status = NULL;   /* 顶部反馈槽：✓ / ✗ */
+
+/* ───────────────── 工具 ───────────────── */
 
 static lv_obj_t *dbox(lv_obj_t *parent, int x, int y, int w, int h, int radius,
                       uint32_t color, lv_opa_t opa)
@@ -38,9 +48,35 @@ static void dpressable(lv_obj_t *o, lv_event_cb_t cb, void *user_data)
     if (cb) lv_obj_add_event_cb(o, cb, LV_EVENT_CLICKED, user_data);
 }
 
+/** 透明的图标槽：重画时只需 lv_obj_clean(槽) 再画图标 */
+static void slot(lv_obj_t **out, lv_obj_t *parent, int x, int y, int size)
+{
+    *out = dbox(parent, x, y, size, size, 0, UI_C_CARD, LV_OPA_TRANSP);
+}
+
+/* ───────────────── 顶部反馈 ───────────────── */
+
+/** 重画顶部小反馈：左意图图标 + 右状态（NULL 状态 = 等待中）*/
+static void fb_repaint(ui_icon_t kind, int state)   /* state: -1 等待, 0 失败, 1 成功 */
+{
+    if (!s_fb_intent) return;
+    lv_obj_clean(s_fb_intent);
+    lv_obj_clean(s_fb_status);
+
+    ui_icon_draw(s_fb_intent, kind, FB_ICON_SZ / 2, FB_ICON_SZ / 2,
+                 FB_ICON_SZ, state < 0 ? UI_C_DIM : UI_C_TEXT);
+
+    if (state >= 0) {
+        ui_icon_draw(s_fb_status,
+                     state ? UI_ICON_OK : UI_ICON_CROSS,
+                     FB_ICON_SZ / 2, FB_ICON_SZ / 2, FB_ICON_SZ,
+                     state ? UI_C_ACCENT : UI_C_DANGER);
+    }
+}
+
 /* ───────────────── 事件 ───────────────── */
 
-/** 点了某个意图格：交给链路，然后回主界面（好让回执条可见） */
+/** 点了某个意图格：发出去、留在本页，顶部先显示"等待"，回执到了再变 ✓/✗ */
 static void on_intent_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -48,12 +84,14 @@ static void on_intent_clicked(lv_event_t *e)
     ui_icon_t kind = (ui_icon_t)(intptr_t)lv_event_get_user_data(e);
     ui_intent_cb_t cb = ui_main_get_intent_cb();
 
+    fb_repaint(kind, -1);            /* 立刻给"已受理"的视觉反馈 */
+
     if (cb) {
-        cb(kind);                 /* 真机：发 OV+AI=，等回执 */
+        cb(kind);                    /* 真机：发 OV+AI=，等回执 */
     } else {
-        ui_main_set_result(kind, true);   /* 无链路：本地假回执 */
+        ui_main_set_result(kind, true);   /* 无链路：本地假回执（会回调到这里）*/
     }
-    ui_stage_show_home(LV_SCR_LOAD_ANIM_MOVE_RIGHT);   /* 回主界面看结果 */
+    /* 注意：**不切页**，留在抽屉里继续操作 */
 }
 
 /** 点了返回 */
@@ -70,10 +108,8 @@ typedef struct {
     uint32_t  color;
 } drw_item_t;
 
-/* 8 个意图，正好铺满 3×3 的前 8 格，第 9 格放返回 */
-static const drw_item_t k_items[8] = {
-    { UI_ICON_MUSIC,  UI_C_TEXT   },   /* A01 放歌/暂停 */
-    { UI_ICON_NEXT,   UI_C_TEXT   },   /* A02 下一首   */
+/* 6 个拓展指令（主界面已占用 A01 播放/暂停、A02 下一首）*/
+static const drw_item_t k_items[6] = {
     { UI_ICON_MOON,   UI_C_TEXT   },   /* A03 我困了   */
     { UI_ICON_VOL,    UI_C_TEXT   },   /* A04 音量+    */
     { UI_ICON_MUTE,   UI_C_TEXT   },   /* A05 音量-    */
@@ -88,16 +124,26 @@ lv_obj_t *ui_drawer_create(void)
 
     s_drawer = lv_obj_create(NULL);
     lv_obj_remove_style_all(s_drawer);
+    lv_obj_set_size(s_drawer, UI_W, UI_H);
     lv_obj_set_style_bg_color(s_drawer, COL(UI_C_BG), 0);
     lv_obj_set_style_bg_opa(s_drawer, LV_OPA_COVER, 0);
     lv_obj_clear_flag(s_drawer, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* 顶部细条：给视觉一个"这是另一页"的锚点（不放文字）*/
+    /* ── 顶部条：左返回、右反馈 ── */
     dbox(s_drawer, 0, 0, UI_W, UI_DRW_TOP_H, 0, UI_C_CARD, LV_OPA_COVER);
-    ui_icon_draw(s_drawer, UI_ICON_GRID, 22, UI_DRW_TOP_H / 2, 22, UI_C_ACCENT);
 
-    /* 3×3：8 个意图 + 1 个返回 */
-    for (int i = 0; i < 9; i++) {
+    lv_obj_t *back = dbox(s_drawer, UI_BACK_X, UI_BACK_Y,
+                          UI_BACK_SIZE, UI_BACK_SIZE, 10,
+                          UI_C_CARD, LV_OPA_TRANSP);
+    ui_icon_draw(back, UI_ICON_BACK, UI_BACK_SIZE / 2, UI_BACK_SIZE / 2,
+                 UI_BACK_SIZE, UI_C_DIM);
+    dpressable(back, on_back_clicked, NULL);
+
+    slot(&s_fb_intent, s_drawer, UI_DRW_FB_X, UI_DRW_FB_Y, FB_ICON_SZ);
+    slot(&s_fb_status, s_drawer, UI_DRW_FB_X + FB_ICON_SZ + 8, UI_DRW_FB_Y, FB_ICON_SZ);
+
+    /* ── 3×2 指令格 ── */
+    for (int i = 0; i < 6; i++) {
         int col = i % 3;
         int row = i / 3;
         int x = UI_DRW_X0 + col * UI_DRW_STEP_X;
@@ -105,22 +151,18 @@ lv_obj_t *ui_drawer_create(void)
 
         lv_obj_t *card = dbox(s_drawer, x, y, UI_DRW_W, UI_DRW_H,
                               UI_DRW_RADIUS, UI_C_CARD, LV_OPA_COVER);
-
-        if (i < 8) {
-            ui_icon_draw(card, k_items[i].icon,
-                         UI_DRW_W / 2, UI_DRW_ICON_CY,
-                         UI_DRW_ICON_SZ, k_items[i].color);
-            dpressable(card, on_intent_clicked, (void *)(intptr_t)k_items[i].icon);
-        } else {
-            /* 第 9 格：返回 */
-            ui_icon_draw(card, UI_ICON_BACK,
-                         UI_DRW_W / 2, UI_DRW_ICON_CY,
-                         UI_DRW_ICON_SZ, UI_C_DIM);
-            dpressable(card, on_back_clicked, NULL);
-        }
+        ui_icon_draw(card, k_items[i].icon, UI_DRW_W / 2, UI_DRW_ICON_CY,
+                     UI_DRW_ICON_SZ, k_items[i].color);
+        dpressable(card, on_intent_clicked, (void *)(intptr_t)k_items[i].icon);
     }
 
     return s_drawer;
+}
+
+void ui_drawer_set_result(ui_icon_t kind, bool ok)
+{
+    if (!s_drawer) return;              /* 抽屉还没建过，忽略 */
+    fb_repaint(kind, ok ? 1 : 0);
 }
 
 void ui_drawer_open(void)

@@ -19,14 +19,28 @@ F_NUM = r"C:\Windows\Fonts\msyhbd.ttc"   # 粗体数字，近似 montserrat 观�
 
 
 def load_theme(path: str) -> dict:
-    theme = {}
-    pat = re.compile(r"#define\s+(UI_[A-Z0-9_]+)\s+\(?\s*(0x[0-9A-Fa-f]+|\d+)\s*\)?")
+    """解析 ui_theme.h 里的 #define。
+
+    支持两种值：
+      1. 字面量：0x1B2129 / 240
+      2. 引用前面常量的简单表达式：(UI_W - 12 - UI_DRW_FB_W) / 2
+         —— 用 eval 在"已解析的常量"作用域里求值，遇到 / 时用整除语义
+    """
+    theme: dict = {}
+    pat = re.compile(r"#define\s+(UI_[A-Z0-9_]+)\s+(.+?)\s*(?:/\*.*)?$")
     with open(path, encoding="utf-8") as fh:
         for line in fh:
-            line = line.split("/*")[0]
-            m = pat.search(line)
-            if m:
-                theme[m.group(1)] = int(m.group(2), 0)
+            line = line.split("/*")[0].strip()
+            m = pat.match(line)
+            if not m:
+                continue
+            name, expr = m.group(1), m.group(2).strip()
+            try:
+                val = eval(expr, {"__builtins__": {}}, dict(theme))  # noqa: S307
+            except Exception:
+                continue
+            if isinstance(val, (int, float)):
+                theme[name] = int(val)
     return theme
 
 
@@ -203,7 +217,7 @@ def draw_home(intent="music", ok=True) -> Image.Image:
         ic_cross(d, sx + sz // 2 + 1, iy + sz // 2, sz, c(T["UI_C_DANGER"]))
 
     # 3 个意图格
-    tiles = [("music", T["UI_C_TEXT"]), ("moon", T["UI_C_TEXT"]), ("grid", T["UI_C_ACCENT"])]
+    tiles = [("music", T["UI_C_TEXT"]), ("next", T["UI_C_TEXT"]), ("grid", T["UI_C_ACCENT"])]
     for i, (kind, col) in enumerate(tiles):
         x = T["UI_TILE_X0"] + i * T["UI_TILE_STEP"]
         put(d, x, T["UI_TILE_Y"], T["UI_TILE_SIZE"], T["UI_TILE_SIZE"],
@@ -212,8 +226,8 @@ def draw_home(intent="music", ok=True) -> Image.Image:
         colr = c(col)
         if kind == "music":
             ic_music(d, cx, cy, s, colr)
-        elif kind == "moon":
-            ic_moon(d, cx, cy, s, colr, c(T["UI_C_CARD"]))
+        elif kind == "next":
+            ic_next(d, cx, cy, s, colr)
         else:
             ic_grid(d, cx, cy, s, colr)
 
@@ -267,19 +281,26 @@ def draw_states() -> Image.Image:
 
 
 def draw_drawer() -> Image.Image:
-    """抽屉页：3×3 = 8 个意图 + 返回（与 ui_drawer.c 一一对应）"""
+    """抽屉页：顶部条（左返回 + 右反馈）+ 3×2 拓展指令（与 ui_drawer.c 一一对应）"""
     W, H = T["UI_W"], T["UI_H"]
     img = Image.new("RGB", (W * S, H * S), c(T["UI_C_BG"]))
     d = ImageDraw.Draw(img)
 
-    # 顶部细条
+    # 顶部条
     put(d, 0, 0, W, T["UI_DRW_TOP_H"], 0, c(T["UI_C_CARD"]))
-    ic_grid(d, 22, T["UI_DRW_TOP_H"] // 2, 22, c(T["UI_C_ACCENT"]))
+    ic_back(d, T["UI_BACK_X"] + T["UI_BACK_SIZE"] // 2, T["UI_BACK_Y"] + T["UI_BACK_SIZE"] // 2,
+            T["UI_BACK_SIZE"], c(T["UI_C_DIM"]))
 
-    # 8 个意图（顺序与 ui_drawer.c 的 k_items 一致）
-    items = [("music", T["UI_C_TEXT"]), ("next", T["UI_C_TEXT"]), ("moon", T["UI_C_TEXT"]),
-             ("vol", T["UI_C_TEXT"]), ("mute", T["UI_C_TEXT"]), ("folder", T["UI_C_TEXT"]),
-             ("list", T["UI_C_TEXT"]), ("mic", T["UI_C_ACCENT"]), ("back", T["UI_C_DIM"])]
+    # 顶部反馈槽（示例：点了「我困了」并成功 → 月亮 + 青勾）
+    fb = max(1, 18)
+    ic_moon(d, T["UI_DRW_FB_X"] + fb // 2, T["UI_DRW_FB_Y"] + fb // 2, fb, c(T["UI_C_TEXT"]),
+            c(T["UI_C_CARD"]))
+    ic_ok(d, T["UI_DRW_FB_X"] + fb + 8 + fb // 2, T["UI_DRW_FB_Y"] + fb // 2, fb,
+          c(T["UI_C_ACCENT"]))
+
+    # 3×2 拓展指令（顺序与 ui_drawer.c 的 k_items 一致）
+    items = [("moon", T["UI_C_TEXT"]), ("vol", T["UI_C_TEXT"]), ("mute", T["UI_C_TEXT"]),
+             ("folder", T["UI_C_TEXT"]), ("list", T["UI_C_TEXT"]), ("mic", T["UI_C_ACCENT"])]
 
     for i, (kind, col) in enumerate(items):
         col_i, row = i % 3, i // 3
@@ -290,11 +311,7 @@ def draw_drawer() -> Image.Image:
         cx, cy = x + T["UI_DRW_W"] // 2, y + T["UI_DRW_ICON_CY"]
         s = T["UI_DRW_ICON_SZ"]
         colr = c(col)
-        if kind == "music":
-            ic_music(d, cx, cy, s, colr)
-        elif kind == "next":
-            ic_next(d, cx, cy, s, colr)
-        elif kind == "moon":
+        if kind == "moon":
             ic_moon(d, cx, cy, s, colr, c(T["UI_C_CARD"]))
         elif kind == "vol":
             ic_vol(d, cx, cy, s, colr)
@@ -304,10 +321,8 @@ def draw_drawer() -> Image.Image:
             ic_folder(d, cx, cy, s, colr)
         elif kind == "list":
             ic_list(d, cx, cy, s, colr)
-        elif kind == "mic":
-            ic_mic(d, cx, cy, s, colr)
         else:
-            ic_back(d, cx, cy, s, colr)
+            ic_mic(d, cx, cy, s, colr)
     return img
 
 

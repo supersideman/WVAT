@@ -61,10 +61,11 @@
 #define UI_STATUS_H      44   /* 顶部状态区高度 */
 #define UI_HINT_H        36   /* 底部提示条高度 */
 
-/* ── 抽屉页（「更多」：9 个意图摊开）───────────────────── */
-#define UI_DRW_TOP_H     44   /* 顶部标题条（只放返回键，无文字）*/
+/* ── 抽屉页（「更多」：只放拓展指令，每行 3 格 × 2 行 = 6 格）─────
+   主界面已经有「音乐播放/暂停」「下一首」，所以抽屉不再重复它们。 */
+#define UI_DRW_TOP_H     44   /* 顶部条：左=返回键，右=操作反馈 */
 #define UI_DRW_X0        12
-#define UI_DRW_Y0        52
+#define UI_DRW_Y0        97   /* 两行在剩余区域里垂直居中：44+(236-130)/2 */
 #define UI_DRW_STEP_X    75   /* 66 宽 + 9 间距 */
 #define UI_DRW_STEP_Y    70   /* 60 高 + 10 间距 */
 #define UI_DRW_W         66
@@ -72,9 +73,14 @@
 #define UI_DRW_RADIUS    14
 #define UI_DRW_ICON_CY   30   /* 图标中心（相对格子上边）*/
 #define UI_DRW_ICON_SZ   28
-#define UI_BACK_X        10   /* 返回键 */
+#define UI_BACK_X        10   /* 返回键（顶部条左侧）*/
 #define UI_BACK_Y        8
 #define UI_BACK_SIZE     28
+/* 顶部条右侧的小反馈槽：左=刚点的意图图标，右=✓/✗ */
+#define UI_DRW_FB_W      56
+#define UI_DRW_FB_H      28
+#define UI_DRW_FB_X      (UI_W - 12 - UI_DRW_FB_W)
+#define UI_DRW_FB_Y      ((UI_DRW_TOP_H - UI_DRW_FB_H) / 2)
 
 /* ── 锁屏页 ───────────────────────────────────────────── */
 #define UI_LOCK_TIME_Y   96    /* 大时钟文字顶边 */
