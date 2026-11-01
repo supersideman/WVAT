@@ -139,13 +139,15 @@ static void result_repaint(void)
 
 /* ───────────────── 对外接口 ───────────────── */
 
-lv_obj_t *ui_main_create(void)
+void ui_main_build(lv_obj_t *parent)
 {
-    s_scr = lv_obj_create(NULL);
-    lv_obj_remove_style_all(s_scr);
-    lv_obj_set_style_bg_color(s_scr, COL(UI_C_BG), 0);
-    lv_obj_set_style_bg_opa(s_scr, LV_OPA_COVER, 0);
-    lv_obj_clear_flag(s_scr, LV_OBJ_FLAG_SCROLLABLE);
+    /* parent 可以是独立屏幕，也可以是 ui_stage 里的一个层 */
+    s_scr = parent;
+    lv_obj_remove_style_all(parent);
+    lv_obj_set_size(parent, UI_W, UI_H);
+    lv_obj_set_style_bg_color(parent, COL(UI_C_BG), 0);
+    lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 
     /* 时钟 */
     s_lbl_time = num_label(s_scr, 0, UI_TIME_Y, UI_W, UI_FONT_NUM44,
@@ -182,8 +184,14 @@ lv_obj_t *ui_main_create(void)
     /* 按下时：底色变亮 + 描边加粗，手指能明显感到"按到了" */
     make_pressable(btn, on_talk_clicked, NULL);
     lv_obj_set_style_border_width(btn, UI_BTN_BORDER + 1, LV_STATE_PRESSED);
+}
 
-    return s_scr;
+/** 独立屏幕版本（一般不用了：开机走 ui_stage）*/
+lv_obj_t *ui_main_create(void)
+{
+    lv_obj_t *scr = lv_obj_create(NULL);
+    ui_main_build(scr);
+    return scr;
 }
 
 void ui_main_set_intent_cb(ui_intent_cb_t cb)
@@ -194,12 +202,6 @@ void ui_main_set_intent_cb(ui_intent_cb_t cb)
 ui_intent_cb_t ui_main_get_intent_cb(void)
 {
     return s_intent_cb;
-}
-
-void ui_main_show(lv_scr_load_anim_t anim)
-{
-    if (!s_scr) ui_main_create();     /* 开机先进锁屏，主界面按需创建 */
-    lv_scr_load_anim(s_scr, anim, 220, 0, false);
 }
 
 void ui_main_set_result(ui_icon_t intent, bool ok)

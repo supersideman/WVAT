@@ -1,6 +1,8 @@
 ﻿/**
  * @file    ui_lock.h
- * @brief   锁屏页：大时钟 + 日期，上滑解锁（无任何文字提示）
+ * @brief   锁屏「层」：大时钟 + 日期（不自己建屏幕，由 ui_stage 嵌入）
+ *
+ * 手势不在这里处理——拖拽判定统一交给 ui_stage，这样锁屏层只管画。
  */
 #ifndef UI_LOCK_H
 #define UI_LOCK_H
@@ -11,11 +13,8 @@
 extern "C" {
 #endif
 
-/** 创建锁屏页（永久屏，只创建一次） */
-lv_obj_t *ui_lock_create(void);
-
-/** 切到锁屏页（休眠唤醒 / 开机时用） */
-void ui_lock_show(void);
+/** 把锁屏内容画进 parent（parent 是 240×280 的容器）*/
+void ui_lock_build(lv_obj_t *parent);
 
 /** 更新锁屏上的时间与日期（RTC 定时器调用） */
 void ui_lock_set_time(const char *time_str, const char *date_str);

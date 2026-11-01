@@ -8,6 +8,7 @@
 
 #include "ui_icons.h"
 #include "ui_main.h"
+#include "ui_stage.h"
 #include "ui_theme.h"
 
 #define COL(c) lv_color_hex(c)
@@ -52,14 +53,14 @@ static void on_intent_clicked(lv_event_t *e)
     } else {
         ui_main_set_result(kind, true);   /* 无链路：本地假回执 */
     }
-    ui_main_show(LV_SCR_LOAD_ANIM_MOVE_RIGHT);   /* 回主界面看结果 */
+    ui_stage_show_home(LV_SCR_LOAD_ANIM_MOVE_RIGHT);   /* 回主界面看结果 */
 }
 
 /** 点了返回 */
 static void on_back_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_main_show(LV_SCR_LOAD_ANIM_MOVE_RIGHT);
+    ui_stage_show_home(LV_SCR_LOAD_ANIM_MOVE_RIGHT);
 }
 
 /* ───────────────── 构建 ───────────────── */

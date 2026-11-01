@@ -19,7 +19,7 @@ $uv = Join-Path $proj "MDK-ARM\LCD.uvprojx"
 $p = Get-Content $uv -Raw
 
 # 需要参与编译的 .c（新增文件必须列进来，否则 Keil 根本不会编它）
-$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c")
+$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c")
 
 $missing = @()
 foreach ($c in $needC) { if ($p -notmatch [regex]::Escape($c)) { $missing += $c } }
@@ -57,25 +57,29 @@ $u = Get-Content $uic -Raw
 if ($u -notmatch 'user_link\.h') {
     $u = $u -replace '#include\s+"ui_main\.h"', "#include `"ui_main.h`"`r`n#include `"user_link.h`""
 }
-if ($u -notmatch 'ui_lock\.h') {
-    $u = $u -replace '#include\s+"user_link\.h"', "#include `"user_link.h`"`r`n#include `"ui_lock.h`""
+if ($u -notmatch 'ui_stage\.h') {
+    $u = $u -replace '#include\s+"user_link\.h"', "#include `"user_link.h`"`r`n#include `"ui_stage.h`""
 }
 
-# 开机先显示锁屏（上滑解锁才进主界面）
-if ($u -match 'ui_main_create\(\)') {
-    $u = $u -replace 'lv_obj_t \* scr_main = ui_main_create\(\);', 'lv_obj_t * scr_lock = ui_lock_create();'
-    $u = $u -replace 'lv_disp_load_scr\(scr_main\);', 'lv_disp_load_scr(scr_lock);'
+# 开机：初始化舞台（锁屏 + 主界面在同一个可拖动容器里）
+if ($u -match 'ui_lock_create\(\)') {
+    $u = $u -replace 'lv_obj_t \* scr_lock = ui_lock_create\(\);', 'ui_stage_init();'
+    $u = $u -replace 'lv_disp_load_scr\(scr_lock\);', 'lv_disp_load_scr(ui_stage_screen());'
+}
+elseif ($u -match 'ui_main_create\(\)') {
+    $u = $u -replace 'lv_obj_t \* scr_main = ui_main_create\(\);', 'ui_stage_init();'
+    $u = $u -replace 'lv_disp_load_scr\(scr_main\);', 'lv_disp_load_scr(ui_stage_screen());'
 }
 
 if ($u -notmatch 'link_init\s*\(\s*\)') {
-    $u = $u -replace '(lv_disp_load_scr\(scr_lock\);)', "`$1`r`n    link_init();   /* 启动 USART1 指令链路 */"
+    $u = $u -replace '(lv_disp_load_scr\(ui_stage_screen\(\)\);)', "`$1`r`n    link_init();   /* 启动 USART1 指令链路 */"
 }
 Set-Content -Path $uic -Value $u -NoNewline
-Write-Output "[3] ui.c: 开机进锁屏 + link_init()"
+Write-Output "[3] ui.c: 开机初始化舞台 + link_init()"
 
 # ── 4. 自检 ─────────────────────────────────────────────
 Write-Output "`n=== ui_init 现在长这样 ==="
-(Get-Content $uic -Raw) -split "`n" | Select-String -Pattern "include|ui_lock_create|ui_main_create|load_scr|link_init" | ForEach-Object { "  " + $_.Line.Trim() }
+(Get-Content $uic -Raw) -split "`n" | Select-String -Pattern "include|stage|load_scr|link_init" | ForEach-Object { "  " + $_.Line.Trim() }
 
-Write-Output "`n=== 工程里的 .c ==="
-Select-String -Path $uv -Pattern "ui_lock\.c|ui_drawer\.c|user_link\.c|ui_icons\.c|ui_main\.c" | ForEach-Object { "  " + $_.Line.Trim() }
+Write-Output "`n=== 工程里我们的 .c ==="
+Select-String -Path $uv -Pattern "ui_stage\.c|ui_lock\.c|ui_drawer\.c|user_link\.c|ui_icons\.c|ui_main\.c" | ForEach-Object { "  " + $_.Line.Trim() }
