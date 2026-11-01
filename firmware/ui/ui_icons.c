@@ -120,14 +120,20 @@ static void ic_mic(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 
 static void ic_next(lv_obj_t *p, int cx, int cy, int s, uint32_t c)
 {
-    static lv_point_t pts[4];        /* 本图标独占 */
-    int h = px(s, 3, 5), w = px(s, 1, 3);
-    pts[0].x = cx - w;     pts[0].y = cy - h / 2;
-    pts[1].x = cx + w / 2; pts[1].y = cy;
-    pts[2].x = cx - w;     pts[2].y = cy + h / 2;
-    pts[3] = pts[0];
-    polyline(p, pts, 4, s / 10 > 1 ? s / 10 : 2, c);
-    put(p, cx + w / 2 + 2, cy - h / 2, s / 12 > 2 ? s / 12 : 2, h, 0, c);
+    /* 之前用描边三角 + 竖条，实机上像"▷|"两根细线，不像"下一首"。
+       改成：4 级台阶拼实心三角（指向右）+ 右侧竖条 */
+    int h = px(s, 3, 5);              /* 三角底部总高 */
+    int stepw = px(s, 1, 9);          /* 每级台阶宽 */
+    int x0 = cx - px(s, 2, 5);
+    int barw = px(s, 1, 10) > 2 ? px(s, 1, 10) : 2;
+
+    for (int i = 0; i < 4; i++) {
+        int hh = h - (h * i) / 4;     /* 逐级变矮 → 右侧收成尖 */
+        if (hh < 2) hh = 2;
+        put(p, x0 + i * stepw, cy - hh / 2, stepw + 1, hh, 0, c);
+    }
+    /* 竖条：紧贴三角右侧，表示"跳下一首" */
+    put(p, x0 + 4 * stepw + 1, cy - h / 2, barw, h, 0, c);
 }
 
 /** 喇叭锥体：后板 + 3 级递增台阶（LVGL 没有填充三角图元） */

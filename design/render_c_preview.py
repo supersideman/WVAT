@@ -135,12 +135,14 @@ def ic_vol(d, cx, cy, s, col):
 
 
 def ic_next(d, cx, cy, s, col):
-    h, w = px(s, 3, 5), px(s, 1, 3)
-    lw = max(2, s // 10)
-    d.line([(cx - w) * S, (cy - h // 2) * S, (cx + w // 2) * S, cy * S,
-            (cx - w) * S, (cy + h // 2) * S, (cx - w) * S, (cy - h // 2) * S],
-           fill=col, width=lw * S)
-    put(d, cx + w // 2 + 2, cy - h // 2, max(2, s // 12), h, 0, col)
+    """下一首：4 级台阶拼实心三角 + 竖条"""
+    h, stepw = px(s, 3, 5), px(s, 1, 9)
+    x0 = cx - px(s, 2, 5)
+    barw = max(2, px(s, 1, 10))
+    for i in range(4):
+        hh = max(2, h - (h * i) // 4)
+        put(d, x0 + i * stepw, cy - hh // 2, stepw + 1, hh, 0, col)
+    put(d, x0 + 4 * stepw + 1, cy - h // 2, barw, h, 0, col)
 
 
 def ic_mute(d, cx, cy, s, col):
