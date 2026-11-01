@@ -34,24 +34,68 @@ class _KEYBDINPUT(ctypes.Structure):
     ]
 
 
+class _MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+    ]
+
+
+class _HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", ctypes.c_ulong),
+        ("wParamL", ctypes.c_ushort),
+        ("wParamH", ctypes.c_ushort),
+    ]
+
+
 class _INPUT(ctypes.Structure):
+    """⚠️ union 里 **三个成员一个都不能少**。
+
+    Windows 要求 SendInput 的 cbSize 精确等于 sizeof(INPUT)（x64 = 40）。
+    之前这里只写了 ki，sizeof 算成 32，于是 SendInput 每次都返回 0
+    ——不报错、不抛异常，按键注入**全部静默失败**（播放/暂停、下一首、
+    音量、静音都无效），排查了很久才发现。
+    """
+
     class _U(ctypes.Union):
-        _fields_ = [("ki", _KEYBDINPUT)]
+        _fields_ = [
+            ("mi", _MOUSEINPUT),
+            ("ki", _KEYBDINPUT),
+            ("hi", _HARDWAREINPUT),
+        ]
 
     _anonymous_ = ("u",)
     _fields_ = [("type", ctypes.c_ulong), ("u", _U)]
 
 
 def _press_vk(vk: int) -> None:
-    """发一个按键（按下 + 抬起）。仅 Windows 有效。"""
+    """发一个按键（按下 + 抬起）。仅 Windows 有效。
+
+    ⚠️ 一定要检查 SendInput 的返回值：它失败时**不会抛异常**，
+       只返回"实际插入的事件数"。以前这里丢弃了返回值，
+       结构体写错导致每次都返回 0 却无人知晓，动作"显示成功但实际没发生"。
+    """
     if sys.platform != "win32":
         raise RuntimeError("动作执行目前只支持 Windows")
+
+    size = ctypes.sizeof(_INPUT)
+    if size != 40:                       # x64 下必须 40，否则必定失败
+        raise RuntimeError(f"INPUT 结构体大小异常（{size}，应为 40），按键注入必失败")
+
     extra = ctypes.c_ulong(0)
     inputs = (_INPUT * 2)()
     for i, flags in enumerate((0, KEYEVENTF_KEYUP)):
         inputs[i].type = 1  # INPUT_KEYBOARD
         inputs[i].ki = _KEYBDINPUT(vk, 0, flags, 0, ctypes.pointer(extra))
-    ctypes.windll.user32.SendInput(2, inputs, ctypes.sizeof(_INPUT))
+
+    n = ctypes.windll.user32.SendInput(2, inputs, size)
+    if n != 2:
+        raise RuntimeError(f"SendInput 只插入了 {n}/2 个事件（VK=0x{vk:02X}）")
 
 
 def _lock_workstation() -> None:
