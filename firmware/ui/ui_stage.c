@@ -11,8 +11,8 @@
 #include "ui_theme.h"
 
 /* 调试开关：把内部状态从 USART1 打出来（printf 已在 usart.c 重定向）
- * 排查完把它改成 0 即可彻底关掉。 */
-#define UI_STAGE_DEBUG 1
+ * 排查阶段用 1；平时设 0——调试日志会占串口带宽，也会混进网关日志。 */
+#define UI_STAGE_DEBUG 0
 #if UI_STAGE_DEBUG
 #include <stdio.h>
 #define DBG(...)  printf(__VA_ARGS__)
