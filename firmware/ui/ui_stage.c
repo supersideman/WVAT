@@ -138,15 +138,19 @@ void ui_stage_init(void)
     lv_obj_set_size(s_stage, UI_W, STAGE_H);
     lv_obj_clear_flag(s_stage, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
 
-    /* 上：锁屏层 */
+    /* 上：锁屏层
+       ⚠️ 顺序必须"先 build、再 set_pos"：lv_obj_set_pos/set_size 写的是样式属性，
+       而 build 内部的 lv_obj_remove_style_all() 会把刚设的坐标一起清掉 → 回到 (0,0)。
+       踩过的坑：主界面层被 reset 到 y=0 盖住锁屏（复位直接就是主界面），
+       返回时两层一起被推出屏幕外（黑屏）。*/
     s_lock = lv_obj_create(s_stage);
-    lv_obj_set_pos(s_lock, 0, 0);
     ui_lock_build(s_lock);
+    lv_obj_set_pos(s_lock, 0, 0);
 
     /* 下：主界面层 */
     lv_obj_t *home = lv_obj_create(s_stage);
-    lv_obj_set_pos(home, 0, UI_H);
     ui_main_build(home);
+    lv_obj_set_pos(home, 0, UI_H);           /* build 之后再定位置！*/
 
     /* 拖拽事件挂在锁屏层上：已解锁时手指落在主界面层，自然不会触发 */
     lv_obj_add_flag(s_lock, LV_OBJ_FLAG_CLICKABLE);
@@ -158,7 +162,10 @@ void ui_stage_init(void)
     s_unlocked = false;
     stage_set_y(0);
 
-    /* 关键几何信息，烧录后从串口一眼看出尺寸/位置是否被改掉 */
+    /* 关键几何信息。
+       ⚠️ lv_obj_get_width/get_y 读的是"计算后的坐标"，必须先跑一次 layout，
+       否则全是 0（第一版调试就被这个假 0 误导过）。*/
+    lv_obj_update_layout(s_root);
     DBG("\r\n[stage] === init done ===\r\n");
     DBG("[stage] screen: w=%d h=%d\r\n",
         (int)lv_obj_get_width(s_root), (int)lv_obj_get_height(s_root));
