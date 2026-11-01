@@ -291,12 +291,13 @@ def draw_drawer() -> Image.Image:
     ic_back(d, T["UI_BACK_X"] + T["UI_BACK_SIZE"] // 2, T["UI_BACK_Y"] + T["UI_BACK_SIZE"] // 2,
             T["UI_BACK_SIZE"], c(T["UI_C_DIM"]))
 
-    # 顶部反馈槽（示例：点了「我困了」并成功 → 月亮 + 青勾）
+    # 顶部反馈（示例：点了「我困了」并成功 → 月亮 + 绿点）
     fb = max(1, 18)
     ic_moon(d, T["UI_DRW_FB_X"] + fb // 2, T["UI_DRW_FB_Y"] + fb // 2, fb, c(T["UI_C_TEXT"]),
             c(T["UI_C_CARD"]))
-    ic_ok(d, T["UI_DRW_FB_X"] + fb + 8 + fb // 2, T["UI_DRW_FB_Y"] + fb // 2, fb,
-          c(T["UI_C_ACCENT"]))
+    disc(d, T["UI_DRW_DOT_X"] + T["UI_DRW_DOT_SZ"] // 2,
+         T["UI_DRW_DOT_Y"] + T["UI_DRW_DOT_SZ"] // 2,
+         T["UI_DRW_DOT_SZ"] // 2, c(T["UI_C_ACCENT"]))
 
     # 3×2 拓展指令（顺序与 ui_drawer.c 的 k_items 一致）
     items = [("moon", T["UI_C_TEXT"]), ("vol", T["UI_C_TEXT"]), ("mute", T["UI_C_TEXT"]),

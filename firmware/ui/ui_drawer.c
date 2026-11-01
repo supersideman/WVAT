@@ -22,8 +22,8 @@
 #define FB_ICON_SZ 18
 
 static lv_obj_t *s_drawer   = NULL;
-static lv_obj_t *s_fb_intent = NULL;   /* 顶部反馈槽：意图图标 */
-static lv_obj_t *s_fb_status = NULL;   /* 顶部反馈槽：✓ / ✗ */
+static lv_obj_t *s_fb_intent = NULL;   /* 顶部反馈：刚点的意图图标 */
+static lv_obj_t *s_fb_dot    = NULL;   /* 顶部反馈：结果圆点（绿/红）*/
 
 /* 超时守卫：点了指令但没等到回执（网关没开/串口掉了/指令丢了），
    3 秒后显示 ✗——否则用户只看到"一直没反应"，无从判断是没执行还是没回复。 */
@@ -69,21 +69,25 @@ static void slot(lv_obj_t **out, lv_obj_t *parent, int x, int y, int size)
 
 /* ───────────────── 顶部反馈 ───────────────── */
 
-/** 重画顶部小反馈：左意图图标 + 右状态（NULL 状态 = 等待中）*/
-static void fb_repaint(ui_icon_t kind, int state)   /* state: -1 等待, 0 失败, 1 成功 */
+/**
+ * 重画顶部小反馈：左边意图图标，右边一个结果圆点
+ * state: -1 等待（无点）、0 失败（红点）、1 成功（绿点）
+ */
+static void fb_repaint(ui_icon_t kind, int state)
 {
     if (!s_fb_intent) return;
     lv_obj_clean(s_fb_intent);
-    lv_obj_clean(s_fb_status);
 
     ui_icon_draw(s_fb_intent, kind, FB_ICON_SZ / 2, FB_ICON_SZ / 2,
                  FB_ICON_SZ, state < 0 ? UI_C_DIM : UI_C_TEXT);
 
-    if (state >= 0) {
-        ui_icon_draw(s_fb_status,
-                     state ? UI_ICON_OK : UI_ICON_CROSS,
-                     FB_ICON_SZ / 2, FB_ICON_SZ / 2, FB_ICON_SZ,
-                     state ? UI_C_ACCENT : UI_C_DANGER);
+    if (!s_fb_dot) return;
+    if (state < 0) {
+        lv_obj_set_style_bg_opa(s_fb_dot, LV_OPA_TRANSP, 0);   /* 等待中：不显示点 */
+    } else {
+        lv_obj_set_style_bg_color(s_fb_dot,
+                                  COL(state ? UI_C_ACCENT : UI_C_DANGER), 0);
+        lv_obj_set_style_bg_opa(s_fb_dot, LV_OPA_COVER, 0);
     }
 }
 
@@ -169,7 +173,11 @@ lv_obj_t *ui_drawer_create(void)
     dpressable(back, on_back_clicked, NULL);
 
     slot(&s_fb_intent, s_drawer, UI_DRW_FB_X, UI_DRW_FB_Y, FB_ICON_SZ);
-    slot(&s_fb_status, s_drawer, UI_DRW_FB_X + FB_ICON_SZ + 8, UI_DRW_FB_Y, FB_ICON_SZ);
+
+    /* 结果圆点：默认透明（等待中不显示），有结果才点亮 */
+    s_fb_dot = dbox(s_drawer, UI_DRW_DOT_X, UI_DRW_DOT_Y,
+                    UI_DRW_DOT_SZ, UI_DRW_DOT_SZ, LV_RADIUS_CIRCLE,
+                    UI_C_ACCENT, LV_OPA_TRANSP);
 
     /* 超时守卫（常驻，200ms 一次）*/
     lv_timer_create(fb_timer_cb, 200, NULL);
