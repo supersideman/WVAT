@@ -19,7 +19,7 @@
 
 #define COL(c) lv_color_hex(c)
 
-#define FB_ICON_SZ 18
+#define FB_ICON_SZ UI_DRW_FB_ICON_SZ
 
 static lv_obj_t *s_drawer   = NULL;
 static lv_obj_t *s_fb_intent = NULL;   /* 顶部反馈：刚点的意图图标 */

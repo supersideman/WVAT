@@ -21,26 +21,38 @@ F_NUM = r"C:\Windows\Fonts\msyhbd.ttc"   # 粗体数字，近似 montserrat 观�
 def load_theme(path: str) -> dict:
     """解析 ui_theme.h 里的 #define。
 
-    支持两种值：
-      1. 字面量：0x1B2129 / 240
-      2. 引用前面常量的简单表达式：(UI_W - 12 - UI_DRW_FB_W) / 2
-         —— 用 eval 在"已解析的常量"作用域里求值，遇到 / 时用整除语义
+    支持字面量（0x1B2129 / 240）和引用其它常量的表达式（UI_W - 12 - X）。
+    采用**多趟求值**：先把所有表达式收集起来，反复尝试求值直到不再有进展，
+    这样即使某个宏引用了它在文件里"后面才定义"的宏也能解析出来。
     """
-    theme: dict = {}
-    pat = re.compile(r"#define\s+(UI_[A-Z0-9_]+)\s+(.+?)\s*(?:/\*.*)?$")
+    exprs: list[tuple[str, str]] = []
+    pat = re.compile(r"#define\s+(UI_[A-Z0-9_]+)\s+(.+?)\s*$")
     with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.split("/*")[0].strip()
             m = pat.match(line)
-            if not m:
-                continue
-            name, expr = m.group(1), m.group(2).strip()
+            if m:
+                exprs.append((m.group(1), m.group(2).strip()))
+
+    theme: dict = {}
+    pending = exprs
+    for _ in range(10):                      # 最多 10 趟，足够解析任何层级的引用
+        still: list[tuple[str, str]] = []
+        progressed = False
+        for name, expr in pending:
             try:
                 val = eval(expr, {"__builtins__": {}}, dict(theme))  # noqa: S307
             except Exception:
+                still.append((name, expr))
                 continue
             if isinstance(val, (int, float)):
                 theme[name] = int(val)
+                progressed = True
+            else:
+                still.append((name, expr))
+        pending = still
+        if not progressed or not pending:
+            break
     return theme
 
 

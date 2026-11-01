@@ -76,15 +76,16 @@
 #define UI_BACK_X        10   /* 返回键（顶部条左侧）*/
 #define UI_BACK_Y        8
 #define UI_BACK_SIZE     28
-/* 顶部条右侧的小反馈：左边是刚点的意图图标，右边一个结果圆点 */
-#define UI_DRW_FB_W      56
-#define UI_DRW_FB_H      28
-#define UI_DRW_FB_X      (UI_W - 12 - UI_DRW_FB_W)
-#define UI_DRW_FB_Y      ((UI_DRW_TOP_H - UI_DRW_FB_H) / 2)
+/* 顶部条右侧的小反馈：意图图标 + 紧挨着的圆点（同一行、留一点间隔）
+   ⚠️ 图标位置固定、不随圆点出现而移动，避免"有结果时图标跳一下" */
+#define UI_DRW_FB_ICON_SZ 18
+#define UI_DRW_FB_GAP     8
+#define UI_DRW_FB_X      (UI_W - 14 - (UI_DRW_FB_ICON_SZ + UI_DRW_FB_GAP + UI_DRW_DOT_SZ))
+#define UI_DRW_FB_Y      ((UI_DRW_TOP_H - UI_DRW_FB_ICON_SZ) / 2)
 #define UI_DRW_FB_TIMEOUT_MS 3000   /* 超时没回执就显示红点（网关没开/掉线/指令丢了）*/
 /* 结果指示用实心圆点：绿=成功，红=失败，不显示=等待中（比 ✓/✗ 干净）*/
 #define UI_DRW_DOT_SZ    12
-#define UI_DRW_DOT_X     (UI_W - 14 - UI_DRW_DOT_SZ)
+#define UI_DRW_DOT_X     (UI_DRW_FB_X + UI_DRW_FB_ICON_SZ + UI_DRW_FB_GAP)
 #define UI_DRW_DOT_Y     ((UI_DRW_TOP_H - UI_DRW_DOT_SZ) / 2)
 
 /* ── 锁屏页 ───────────────────────────────────────────── */
