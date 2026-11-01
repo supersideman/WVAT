@@ -81,6 +81,7 @@
 #define UI_DRW_FB_H      28
 #define UI_DRW_FB_X      (UI_W - 12 - UI_DRW_FB_W)
 #define UI_DRW_FB_Y      ((UI_DRW_TOP_H - UI_DRW_FB_H) / 2)
+#define UI_DRW_FB_TIMEOUT_MS 3000   /* 超时没回执就显示 ✗（网关没开/掉线/指令丢了）*/
 
 /* ── 锁屏页 ───────────────────────────────────────────── */
 #define UI_LOCK_TIME_Y   96    /* 大时钟文字顶边 */
