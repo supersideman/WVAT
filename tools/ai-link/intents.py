@@ -13,6 +13,8 @@ import sys
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional
 
+import audio_win          # 音量/静音走 CoreAudio，确定性且可回读
+
 # ── Windows 虚拟键码 ─────────────────────────────────────────────
 VK_MEDIA_NEXT_TRACK = 0xB0
 VK_MEDIA_PREV_TRACK = 0xB1
@@ -148,12 +150,30 @@ _reg("A01", "放歌/暂停", "A", "已切换播放",
      lambda arg: _press_vk(VK_MEDIA_PLAY_PAUSE))
 _reg("A02", "下一首", "A", "已切到下一首",
      lambda arg: _press_vk(VK_MEDIA_NEXT_TRACK))
-_reg("A03", "我困了", "A", "已锁屏并静音",
-     lambda arg: (_press_vk(VK_VOLUME_MUTE), _lock_workstation(), _monitor_off()))
-_reg("A04", "音量+", "A", "音量已调高",
-     lambda arg: _press_vk(VK_VOLUME_UP))
-_reg("A05", "音量-", "A", "音量已调低",
-     lambda arg: _press_vk(VK_VOLUME_DOWN))
+
+# ── 音量/静音改走 CoreAudio（确定性，且能把音量读回来做回执）──
+# 为什么不用模拟音量键：同样的 SendInput 在前台进程里有效，在长时间运行的
+# 网关进程里却"返回成功但毫无效果"，依赖输入桌面太不可靠，且无法验证。
+def _vol_up(arg: str) -> str:
+    pct = round(audio_win.step_volume(+0.05) * 100)
+    return f"音量已调高 {pct}%"
+
+
+def _vol_down(arg: str) -> str:
+    pct = round(audio_win.step_volume(-0.05) * 100)
+    return f"音量已调低 {pct}%"
+
+
+def _sleepy(arg: str) -> str:
+    audio_win.set_mute(True)
+    _lock_workstation()
+    _monitor_off()
+    return "已静音并锁屏"
+
+
+_reg("A03", "我困了", "A", "已静音并锁屏", _sleepy)
+_reg("A04", "音量+", "A", "音量已调高", _vol_up)
+_reg("A05", "音量-", "A", "音量已调低", _vol_down)
 _reg("A06", "打开资料", "A", "已打开",
      lambda arg: _open_path(arg))
 _reg("A07", "查状态", "A", "在线",
@@ -181,7 +201,7 @@ class Executor:
             return True, action.reply
 
         try:
-            action.run(arg)
+            dynamic = action.run(arg)
         except Exception as exc:               # 单条动作失败不能拖垮网关
             msg = f"{action.name}失败：{exc}"
             self.log.append(msg)
@@ -189,6 +209,10 @@ class Executor:
             return False, action.name + "失败"
         self.log.append(f"{action.code} {action.name} ok")
         print(f"  [执行] {action.code} {action.name} ok", flush=True)
+
+        # 动作可以返回一句话（例如"音量 63%"），用动态结果替代固定的回执文案
+        if isinstance(dynamic, str) and dynamic:
+            return True, dynamic
         return True, action.reply
 
 
