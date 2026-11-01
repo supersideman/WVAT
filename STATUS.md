@@ -78,6 +78,9 @@ powershell -ExecutionPolicy Bypass -File WVAT\tools\wire_link.ps1
 
 | 坑 | 现象 | 解法 |
 |---|---|---|
+| **网关必须用户自己启动** | 播放/暂停、下一首点了没反应 | 代启的进程（沙箱/高权限宿主）**没有输入注入权限**：`SendInput` 返回 2 但输入进不了桌面。**必须用户在自己终端启动网关**：双击 `tools\ai-link\start_gateway.cmd` |
+| **音量别用模拟按键** | 音量键时灵时不灵、无法验证 | 改用 CoreAudio 直接设音量（`audio_win.py`），能回读百分比，回执带真实数字 |
+| **`.cmd` 必须 CRLF + ASCII** | 双击窗口一闪就退，报 `'le' is not recognized` | 批处理文件必须 **CRLF 换行 + 纯 ASCII**；LF 会被 cmd 拆错行 |
 | 中文注释吞行 | 宏"未声明"、编译莫名失败 | 源文件必须 **UTF-8 带 BOM**；编辑工具会剥 BOM，改完要补 |
 | **`SendInput` 静默失败** | 日志说"执行 ok"，系统毫无反应 | `INPUT` 的 union 必须含 `mi/ki/hi` 三个成员，x64 上 `sizeof` = **40**；并且**一定要检查返回值** |
 | **`Set-Content` 毁中文** | .md 变成 `?` / 非法 UTF-8 | PowerShell 5.1 默认 ANSI；写文本用 `[System.IO.File]::WriteAllText(..., UTF8Encoding)` |
@@ -110,6 +113,16 @@ powershell -ExecutionPolicy Bypass -File WVAT\tools\wire_link.ps1
 
 ## 恢复现场
 
+**日常用法：双击这个就行**
+
+```
+WVAT\tools\ai-link\start_gateway.cmd
+```
+
+它会自动找 CH340 串口、以真执行模式启动。**必须由你自己双击**（见坑清单第一条：代启进程没有输入注入权限）。
+
+手动方式（需要指定口号/演练模式时）：
+
 ```powershell
 # 1. 看进度
 cd WVAT; git log --oneline; git tag -l
@@ -117,9 +130,10 @@ cd WVAT; git log --oneline; git tag -l
 # 2. 查口号（会变！）
 [System.IO.Ports.SerialPort]::GetPortNames()
 
-# 3. 启网关（真执行）
+# 3. 手动启网关（真执行）
 $env:PYTHONPATH="C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\tools\_pylibs"
 python WVAT\tools\ai-link\gateway.py --transport serial --serial-port COM13 --enable-actions
 
 # 4. 只演练不动系统：去掉 --enable-actions
+# 5. 用启动器演练：start_gateway.cmd dry
 ```
