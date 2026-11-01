@@ -209,8 +209,11 @@ def main() -> int:
         if not args.serial_port:
             print("serial 模式需要 --serial-port COMxx", file=sys.stderr)
             return 2
-        ch = SerialChannel(args.serial_port, args.baudrate)
-        print(f"[transport] 串口 {args.serial_port} @ {args.baudrate}", flush=True)
+        try:
+            ch = SerialChannel(args.serial_port, args.baudrate)
+        except RuntimeError as exc:
+            print(f"[错误] {exc}", file=sys.stderr)
+            return 1
     else:
         ch = SocketServerChannel(args.host, args.port)
 

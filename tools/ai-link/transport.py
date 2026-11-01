@@ -147,30 +147,92 @@ class SocketClientChannel(_BaseChannel):
 
 
 class SerialChannel(_BaseChannel):
-    """真实串口。需要 pip install pyserial（不属于当前 P0 阶段）。"""
+    """真实串口（CH340 / 蓝牙 SPP 虚拟 COM）。
+
+    ⚠️ 串口设备被拔掉、板子复位、或端口被别的程序占走时，pyserial 会抛
+    SerialException("ClearCommError failed / PermissionError")。
+    如果不接住，整个网关进程会直接崩掉——答辩现场就这么翻车。
+    所以这里做两件事：
+      1. 任何读写异常都只标记掉线，不向上抛
+      2. 每 2 秒尝试重连一次，插回去就自动恢复
+    """
+
+    RETRY_INTERVAL = 2.0
 
     def __init__(self, port: str, baudrate: int = 115200):
         try:
             import serial  # type: ignore
         except ImportError as exc:
             raise RuntimeError("串口模式需要 pyserial：pip install pyserial") from exc
-        self._ser = serial.Serial(port, baudrate, timeout=0)
+        self._serial_mod = serial
+        self.port = port
+        self.baudrate = baudrate
         self._buf = b""
+        self._ser = None
+        self._next_try = 0.0
+        if not self._open():
+            # 首次打不开就报错退出（这多半是口号写错了，早点暴露比默默重试好）
+            raise RuntimeError(f"打不开串口 {port}（检查口号是否被占用/是否存在）")
+        print(f"[transport] 串口 {port} 已打开 @ {baudrate}", flush=True)
 
+    # ── 连接管理 ─────────────────────────────────────────
+    @property
+    def connected(self) -> bool:
+        return self._ser is not None
+
+    def _open(self) -> bool:
+        import time
+        self._next_try = time.time() + self.RETRY_INTERVAL
+        try:
+            self._ser = self._serial_mod.Serial(self.port, self.baudrate, timeout=0)
+            self._buf = b""
+            return True
+        except Exception:
+            self._ser = None
+            return False
+
+    def _drop(self, why: str) -> None:
+        if self._ser is not None:
+            print(f"[transport] 串口掉线（{why}），每 {self.RETRY_INTERVAL:.0f}s 尝试重连…", flush=True)
+        try:
+            if self._ser is not None:
+                self._ser.close()
+        except Exception:
+            pass
+        self._ser = None
+
+    # ── 读写 ────────────────────────────────────────────
     def send_line(self, line: str) -> None:
-        self._ser.write(line.encode("utf-8"))
+        if self._ser is None:
+            return
+        try:
+            self._ser.write(line.encode("utf-8"))
+        except Exception as exc:
+            self._drop(str(exc))
 
     def recv_lines(self) -> List[str]:
-        n = self._ser.in_waiting
-        if n:
-            self._buf += self._ser.read(n)
+        import time
+        if self._ser is None:
+            if time.time() >= self._next_try:
+                if self._open():
+                    print(f"[transport] 串口 {self.port} 已重连 ✅", flush=True)
+            return []
+        try:
+            n = self._ser.in_waiting
+            if n:
+                self._buf += self._ser.read(n)
+        except Exception as exc:
+            self._drop(str(exc))
+            return []
         return _split_lines(self)
 
     def close(self) -> None:
         try:
-            self._ser.close()
+            if self._ser is not None:
+                self._ser.close()
         except Exception:
             pass
+        self._ser = None
 
 
 def _split_lines(ch: _BaseChannel) -> List[str]:
