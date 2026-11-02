@@ -1,10 +1,21 @@
 @echo off
-rem 双击这个文件查看提交历史（gitk 是 Git 自带的图形历史浏览器，不用安装）
-rem 注意：要在「资源管理器」里双击，在聊天界面里点它只会显示源码
-cd /d "%~dp0"
-gitk --all
+rem Open the WVAT repository history in gitk.
+rem Run by double-clicking THIS file. It always switches to the repo root
+rem first, so gitk never starts in a non-repository directory.
+title WVAT - git history
+cd /d "%~dp0.."
+
+git rev-parse --show-toplevel >nul 2>&1
 if errorlevel 1 (
   echo.
-  echo gitk 启动失败，把上面的报错发给我
-  pause >nul
+  echo [error] this folder is not a git repository:
+  echo         %CD%
+  echo.
+  echo         expected a .git folder in: %~dp0..
+  pause
+  exit /b 1
 )
+
+echo [info] repository: %CD%
+start "" gitk --all
+exit /b 0
