@@ -677,6 +677,11 @@
               <FilePath>..\User\GUI\ui_icons.c</FilePath>
             </File>
             <File>
+              <FileName>ui_status.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\GUI\ui_status.c</FilePath>
+            </File>
+            <File>
               <FileName>user_clock.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\GUI\user_clock.c</FilePath>

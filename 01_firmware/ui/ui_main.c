@@ -9,6 +9,7 @@
 #include "ui_theme.h"
 #include "ui_icons.h"
 #include "ui_drawer.h"
+#include "ui_status.h"
 
 #define COL(c) lv_color_hex(c)
 
@@ -96,6 +97,11 @@ static void on_more_clicked(lv_event_t *e)
 static void on_talk_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+
+    /* 语音是"有过程"的操作：先切到全屏状态页显示录音中，
+       结果到了再由 ui_main_set_result() 转到成功/失败 */
+    ui_status_recording();
+
     if (s_intent_cb) {
         s_intent_cb(UI_ICON_MIC);
     } else {
@@ -214,6 +220,11 @@ void ui_main_set_result(ui_icon_t intent, bool ok)
 
     /* 抽屉可能正开着：把回执也送到它顶部的小反馈槽 */
     ui_drawer_set_result(intent, ok);
+
+    /* 状态页正开着（语音流程）：转到全屏结果，1.2 秒后自动返回 */
+    if (ui_status_visible()) {
+        ui_status_show_result(intent, ok, UI_ST_HOLD_MS);
+    }
 }
 
 void ui_main_set_time(const char *time_str, const char *date_str)

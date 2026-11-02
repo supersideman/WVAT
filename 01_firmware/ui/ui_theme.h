@@ -94,4 +94,19 @@
 #define UI_LOCK_SWIPE_PX 80    /* 上滑多少像素算解锁；30 太灵敏，轻碰一下就进去了 */
 #define UI_LOCK_HOLD_MS  1200  /* 长按兜底解锁（防手势失效被卡在锁屏）*/
 
+/* ── 状态页（全屏反馈，服务语音流程）────────────────────── */
+#define UI_ST_CY         118   /* 主图形中心 y */
+#define UI_ST_BARS       13    /* 录音波形条数 */
+#define UI_ST_BAR_W      4
+#define UI_ST_BAR_GAP    9     /* 相邻条中心距 */
+#define UI_ST_BAR_MIN_H  10
+#define UI_ST_BAR_MAX_H  36
+#define UI_ST_DOT_R      6     /* 录音时顶部的红点半径 */
+#define UI_ST_DOT_Y      44
+#define UI_ST_RING_R     44    /* 结果页外圈半径 */
+#define UI_ST_RING_W     3
+#define UI_ST_ICON_SZ    56    /* 对勾/叉的尺寸 */
+#define UI_ST_HOLD_MS    1200  /* 结果显示多久后自动返回 */
+#define UI_ST_REC_MAX_MS 5000  /* 录音状态最多停留（没回执也要有结局）*/
+
 #endif /* UI_THEME_H */
