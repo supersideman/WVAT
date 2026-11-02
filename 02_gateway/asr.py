@@ -23,8 +23,12 @@ import queue
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VENDOR = os.path.join(HERE, "..", "vendor")
-sys.path.insert(0, os.path.join(VENDOR, "_pylibs"))
+VENDOR = os.path.abspath(os.path.join(HERE, "..", "vendor"))
+# ⚠️ 一律用规范化绝对路径：带 ".." 的 sys.path 条目在某些环境下
+#    会让 .pyd（_cffi_backend）导入失败，报 "No module named"。
+PYLIBS = os.path.abspath(os.path.join(VENDOR, "_pylibs"))
+if PYLIBS not in sys.path:
+    sys.path.insert(0, PYLIBS)
 
 RATE = 16000
 MODEL_NAME = "vosk-model-small-cn-0.22"

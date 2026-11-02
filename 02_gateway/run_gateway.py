@@ -19,7 +19,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 # 解压后的 pyserial 放在项目根的 vendor/_pylibs（见 .gitignore，不入库）
-sys.path.insert(0, os.path.join(HERE, "..", "vendor", "_pylibs"))
+_pylibs = os.path.abspath(os.path.join(HERE, "..", "vendor", "_pylibs"))
+if _pylibs not in sys.path:
+    sys.path.insert(0, _pylibs)
 
 # ── 参数 ────────────────────────────────────────────────
 port = ""
