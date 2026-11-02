@@ -129,4 +129,19 @@
 #define UI_REC_OK_W      96    /* 确认/取消按钮尺寸 */
 #define UI_REC_OK_GAP    16
 
+/* 录音时长限制
+   · 上限 10 秒：语音指令 2~5 秒够用，10 秒是宽容上限；
+     真正的约束在链路——16kHz/16bit 音频要 32KB/s，串口必须提到 460800。
+   · 下限 0.3 秒：太短视为误触，直接丢弃，不发给网关。
+   · 录制中在顶部显示已录时长，让用户知道"还在录"和"快到头了"。*/
+#define UI_REC_MAX_MS    10000
+#define UI_REC_MIN_MS    300
+#define UI_REC_TIMER_X   (UI_W - 52)   /* 顶部右侧的计时文字 */
+#define UI_REC_TIMER_Y   5
+
+/* 转写文字显示上限：文字区 4 行 × 约 15 字 ≈ 60 汉字。
+   协议 MAX_TEXT_BYTES=60（20 汉字）更严格，所以正常不会溢出；
+   超过 UI_REC_TEXT_MAX 个字符时直接截断，避免文字溢出到按钮区。*/
+#define UI_REC_TEXT_MAX  60
+
 #endif /* UI_THEME_H */

@@ -28,6 +28,7 @@ static lv_obj_t *s_scr = NULL;
 static lv_obj_t *s_prev_scr = NULL;
 static lv_obj_t *s_wave[UI_REC_WAVE_BARS];
 static lv_obj_t *s_lbl_text = NULL;
+static lv_obj_t *s_lbl_timer = NULL;     /* 顶部右侧：已录时长 */
 static lv_obj_t *s_btn_mic = NULL;
 static lv_obj_t *s_grp_confirm = NULL;   /* 确认/取消两个按钮的容器 */
 
@@ -75,6 +76,12 @@ static void set_bars(int h)
 
 static void refresh(void)
 {
+    /* 计时标签只在录音态显示 */
+    if (s_lbl_timer) {
+        if (s_state == REC_RECORDING) lv_obj_clear_flag(s_lbl_timer, LV_OBJ_FLAG_HIDDEN);
+        else                          lv_obj_add_flag(s_lbl_timer, LV_OBJ_FLAG_HIDDEN);
+    }
+
     switch (s_state) {
     case REC_IDLE:
         set_bars(UI_REC_WAVE_HMIN);
@@ -111,28 +118,44 @@ static void refresh(void)
 
 /* ───────────────── 事件 ───────────────── */
 
+/** 开始录音：记时间戳、切状态；真接麦后这里还要"启动 I2S 采集 + 开始流式上行" */
+static void start_recording(void)
+{
+    s_state = REC_RECORDING;
+    s_tick  = lv_tick_get();
+    s_text[0] = '\0';
+    refresh();
+}
+
+/** 结束录音：太短视为误触直接丢弃；否则进入等待识别，并发出识别请求 */
+static void stop_recording(void)
+{
+    uint32_t dur = lv_tick_elaps(s_tick);
+
+    if (dur < UI_REC_MIN_MS) {
+        /* 误触：不发给网关，直接回待机 */
+        s_state = REC_IDLE;
+        refresh();
+        return;
+    }
+
+    s_state = REC_WAITING;
+    s_tick  = lv_tick_get();
+    refresh();
+
+    /* 请求识别：复用 A08（真接麦后改成"结束上行 + 请求转写"）*/
+    ui_intent_cb_t cb = ui_main_get_intent_cb();
+    if (cb) cb(UI_ICON_MIC);
+}
+
 static void on_mic_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
 
     if (s_state == REC_IDLE) {
-        /* 开始"录音" */
-        s_state = REC_RECORDING;
-        s_tick  = lv_tick_get();
-        refresh();
-
-        /* 请求识别：复用 A08 这条指令（真接麦后这里改成开始采集 + 流式上行）*/
-        ui_intent_cb_t cb = ui_main_get_intent_cb();
-        if (cb) cb(UI_ICON_MIC);
-        return;
-    }
-
-    if (s_state == REC_RECORDING) {
-        /* 停止录音，等识别结果 */
-        s_state = REC_WAITING;
-        s_tick  = lv_tick_get();
-        refresh();
-        return;
+        start_recording();
+    } else if (s_state == REC_RECORDING) {
+        stop_recording();
     }
 }
 
@@ -171,11 +194,25 @@ static void rec_timer_cb(lv_timer_t *t)
     if (!s_visible) return;
 
     if (s_state == REC_RECORDING) {
+        uint32_t dur = lv_tick_elaps(s_tick);
+
+        /* 到上限自动停止：不中断用户，但也不能无限录 */
+        if (dur >= UI_REC_MAX_MS) {
+            stop_recording();
+            return;
+        }
+
         /* 波形跳动：每 100ms 刷新一次高度 */
         for (int i = 0; i < UI_REC_WAVE_BARS; i++) {
             int h = next_height();
             lv_obj_set_height(s_wave[i], h);
             lv_obj_set_y(s_wave[i], UI_REC_WAVE_CY - h / 2);
+        }
+
+        /* 顶部显示已录时长，例如 "3.2s"（同时让用户知道快到 10 秒上限）*/
+        if (s_lbl_timer) {
+            lv_label_set_text_fmt(s_lbl_timer, "%u.%us",
+                                  (unsigned)(dur / 1000u), (unsigned)((dur % 1000u) / 100u));
         }
     } else if (s_state == REC_WAITING) {
         /* 等太久没结果 → 视为识别失败，直接回待机（真接麦后可换成提示）*/
@@ -206,6 +243,14 @@ static void build_screen(void)
     lv_obj_add_flag(back, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_color(back, COL(UI_C_PRESSED), LV_STATE_PRESSED);
     lv_obj_add_event_cb(back, on_back_clicked, LV_EVENT_CLICKED, NULL);
+
+    /* 已录时长（仅录音时显示，让用户知道快到 10 秒上限）*/
+    s_lbl_timer = lv_label_create(s_scr);
+    lv_obj_set_pos(s_lbl_timer, UI_REC_TIMER_X, UI_REC_TIMER_Y);
+    lv_obj_set_style_text_font(s_lbl_timer, &lv_font_cn_14, 0);
+    lv_obj_set_style_text_color(s_lbl_timer, COL(UI_C_WARN), 0);
+    lv_label_set_text(s_lbl_timer, "");
+    lv_obj_add_flag(s_lbl_timer, LV_OBJ_FLAG_HIDDEN);
 
     /* 波形 */
     int total = (UI_REC_WAVE_BARS - 1) * UI_REC_WAVE_GAP;
@@ -299,9 +344,15 @@ void ui_rec_set_text(const char *text)
 {
     if (!s_scr || !text) return;
 
-    /* 只保留一行内能放下的量，防止撑爆缓冲区 */
-    strncpy(s_text, text, sizeof(s_text) - 1);
-    s_text[sizeof(s_text) - 1] = '\0';
+    /* 两层截断：先按界面能显示的字数，再按缓冲区大小。
+       文字区约 4 行 × 15 字 ≈ 60 汉字；协议上限更严（60 字节 ≈ 20 汉字），
+       正常不会触发，但闸门必须有——否则长句会溢出到按钮区。 */
+    size_t n = 0;
+    while (text[n] != '\0' && n < UI_REC_TEXT_MAX && n < sizeof(s_text) - 1) {
+        n++;
+    }
+    memcpy(s_text, text, n);
+    s_text[n] = '\0';
 
     s_state = REC_TEXT;
     refresh();
