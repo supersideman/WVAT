@@ -88,6 +88,49 @@ def model_dir() -> str:
     return _resolve_model()
 
 
+def preflight() -> tuple[bool, str]:
+    """启动自检：逐项检查依赖，返回 (是否可用, 说明)。
+
+    为什么要在启动时检查：
+        以前是"按下录音键才发现缺模块"，然后静默降级成假识别——
+        看起来能用、其实是假的（踩过）。把检查提前，一眼看出环境问题。
+    """
+    checks: list[str] = []
+
+    pylibs = os.path.join(VENDOR, "_pylibs")
+    if not os.path.isdir(pylibs):
+        return False, f"依赖目录不存在：{pylibs}"
+
+    try:
+        import _cffi_backend  # noqa: F401
+    except Exception as exc:                          # noqa: BLE001
+        return False, (f"cffi 后端不可用（{type(exc).__name__}: {exc}）"
+                       f"；请确认 {pylibs} 下有 _cffi_backend*.pyd")
+    checks.append("cffi")
+
+    try:
+        import sounddevice as sd
+        dev = sd.query_devices(kind="input")
+    except Exception as exc:                          # noqa: BLE001
+        return False, f"sounddevice 不可用（{type(exc).__name__}: {exc}）"
+    checks.append(f"mic={dev['name'][:18]}")
+
+    try:
+        import vosk  # noqa: F401
+    except Exception as exc:                          # noqa: BLE001
+        return False, f"vosk 不可用（{type(exc).__name__}: {exc}）"
+    checks.append("vosk")
+
+    m = _resolve_model()
+    if not _looks_like_model(m):
+        return False, f"模型缺失：{m}"
+    if not _is_ascii(m):
+        return False, f"模型路径含非 ASCII 字符（vosk 打不开）：{m}"
+    checks.append(os.path.basename(m))
+
+    return True, "自检通过：" + " · ".join(checks)
+
+
 def _ensure_model():
     """懒加载模型（第一次要 1~2 秒，之后复用）。"""
     global _model, _recognizer

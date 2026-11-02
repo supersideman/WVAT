@@ -43,14 +43,6 @@ FALLBACK_KEYWORDS = [
     (("几点", "时间", "状态", "在线"), "A07"),
 ]
 
-# 假 ASR 用：轮流返回这几句（真 ASR 接上后整段删掉）
-FAKE_ASR_SENTENCES = [
-    "帮我打开资料",
-    "下一首",
-    "我困了",
-    "现在几点",
-    "把音量调高一点",
-]
 
 
 class Gateway:
@@ -58,7 +50,8 @@ class Gateway:
         self.ch = channel
         self.ex = executor
         self.use_llm = use_llm
-        self.asr = asr              # 语音识别器（None = 用假识别）
+        self.asr = asr              # 语音识别器（LiveRecorder 实例；None = 不可用）
+        self.asr_error = ""         # 不可用时的原因（启动自检会填）
         self.dedup: "queue.OrderedDict[int, str]" = __import__("collections").OrderedDict()
         self.last_req_id = 0        # 用于识别设备复位（REQ_ID 回退）
         self.missed_pong = 0
@@ -175,12 +168,14 @@ class Gateway:
         为什么要分 start/stop：
             用户说的话在"按下开始"和"按下停止"之间。如果等 stop 才开始录音，
             录到的是说完之后的环境音，必然识别不出来。
+
+        ⚠️ 这里**不再有任何假识别兜底**：任何一步失败都明确回 ERR 并打印原因。
+           以前"失败就悄悄用预设句子"，看起来能用、其实是假的，排查时被误导过。
         """
         if self.asr is None:
-            text = self._fake_asr()
-            self.ch.send_line(P.ev_frame("ASR", text))
-            print(f"  [假识别] → {text}", flush=True)
-            return "识别完成", P.STATUS_OK
+            err = self.asr_error or "语音识别未启用"
+            print(f"  [!] {err}", flush=True)
+            return "语音识别未启用", P.STATUS_ERR
 
         cmd = (arg or "").strip().lower()
 
@@ -190,10 +185,8 @@ class Gateway:
                 print("  [录音] 开始（对着电脑麦克风说话）", flush=True)
                 return "录音中", P.STATUS_OK
             except Exception as exc:                  # noqa: BLE001
-                print(f"  [!] 打开麦克风失败：{exc}", flush=True)
-                self.asr = None                        # 降级到假识别
-                text = self._fake_asr()
-                self.ch.send_line(P.ev_frame("ASR", text))
+                print(f"  [!] 打开麦克风失败：{type(exc).__name__}: {exc}", flush=True)
+                self.asr_error = f"麦克风不可用：{exc}"
                 return "麦克风不可用", P.STATUS_ERR
 
         if cmd == "stop":
@@ -201,31 +194,31 @@ class Gateway:
                 pcm = self.asr.stop()
                 ms = int(len(pcm) / 2 / 16000 * 1000)
                 print(f"  [录音] 结束，{ms} ms，peak={self.asr.peak}", flush=True)
-                text = self.asr.transcribe(pcm) if ms >= 300 else ""
             except Exception as exc:                  # noqa: BLE001
-                print(f"  [!] 识别失败：{exc}", flush=True)
-                text = ""
+                print(f"  [!] 停止录音失败：{exc}", flush=True)
+                return "录音失败", P.STATUS_ERR
+
+            if ms < 300:
+                print("  [!] 录音太短（<0.3s），不发识别", flush=True)
+                return "录音太短", P.STATUS_ERR
+
+            try:
+                text = self.asr.transcribe(pcm)
+            except Exception as exc:                  # noqa: BLE001
+                print(f"  [!] 识别失败：{type(exc).__name__}: {exc}", flush=True)
+                return "识别失败", P.STATUS_ERR
+
             if not text:
-                text = self._fake_asr()
-                print(f"  [空结果→假识别兜底] → {text}", flush=True)
+                print(f"  [!] 识别为空（peak={self.asr.peak}，声音可能太轻）", flush=True)
+                return "没听清", P.STATUS_ERR
+
             self.ch.send_line(P.ev_frame("ASR", text))
             print(f"  [识别] → {text}", flush=True)
             return "识别完成", P.STATUS_OK
 
-        # 没带 arg：说明终端发的还是老式 A08。
-        # 这里**不猜、不兜底假数据**——明确报错，否则"看起来在跑、其实是假的"，
-        # 排查时反而被误导（踩过：旧固件 + 假识别兜底，以为是新固件在工作）。
+        # 没带 arg：说明终端发的还是老式 A08 → 固件是旧版
         print("  [!] 收到不带 start/stop 的 A08：固件可能是旧版（请重新编译烧录）", flush=True)
-        self.ch.send_line(P.ar_frame(0, P.STATUS_ERR, "固件需更新"))
         return "固件需更新（A08 缺 start/stop）", P.STATUS_ERR
-
-    # ── 假 ASR（真识别接上前用它把流程跑通）──────────────────
-    def _fake_asr(self) -> str:
-        """轮流返回预设句子，模拟"识别出你说的话"。"""
-        idx = self.counters.get("fake_asr_idx", 0)
-        text = FAKE_ASR_SENTENCES[idx % len(FAKE_ASR_SENTENCES)]
-        self.counters["fake_asr_idx"] = idx + 1
-        return text
 
     def slow_channel(self, text: str) -> str:
         if self.use_llm:
@@ -317,20 +310,27 @@ def main() -> int:
     else:
         ch = SocketServerChannel(args.host, args.port)
 
-    # 语音识别器：--asr 时才加载（模型加载要 1~2 秒）
+    # 语音识别器：--asr 时做**启动自检**（依赖问题必须在启动时暴露，不能等按了才报）
     asr = None
+    asr_error = ""
     if args.asr:
         try:
             import asr as asr_mod
-            if not asr_mod.model_ready():
-                print("[asr] 模型缺失，改用假识别；请把 vosk-model-small-cn-0.22 放到 vendor/models/", flush=True)
-            else:
+            ok, msg = asr_mod.preflight()
+            print(f"[asr] {msg}", flush=True)
+            if ok:
                 asr = asr_mod.LiveRecorder(dev=args.mic)
-                print(f"[asr] 已启用本地中文识别（默认设备：{args.mic if args.mic is not None else "系统默认"}）", flush=True)
+                print("[asr] 已启用本地中文识别", flush=True)
+            else:
+                asr_error = msg
         except Exception as exc:                      # noqa: BLE001
-            print(f"[asr] 初始化失败，改用假识别：{exc}", flush=True)
+            asr_error = f"{type(exc).__name__}: {exc}"
+            print(f"[asr] 初始化失败：{asr_error}", flush=True)
+    else:
+        asr_error = "未加 --asr 参数"
 
     gw = Gateway(ch, Executor(dry_run=not args.enable_actions), use_llm=args.llm, asr=asr)
+    gw.asr_error = asr_error
     print(f"[gateway] 动作执行：{'真执行' if args.enable_actions else '演练模式（不改系统）'}",
           flush=True)
     print(f"[gateway] 慢通道：{'DeepSeek' if args.llm else '本地关键词兜底'}", flush=True)
