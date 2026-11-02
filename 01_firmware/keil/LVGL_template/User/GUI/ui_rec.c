@@ -122,6 +122,10 @@ static void refresh(void)
 static void start_recording(void)
 {
     s_state = REC_RECORDING;
+    {   /* 电脑麦克风兜底：立刻让网关开始录（真接 I2S 麦后这里改成启动采集）*/
+        ui_mic_cb_t mic = ui_main_get_mic_cb();
+        if (mic) mic(true);
+    }
     s_tick  = lv_tick_get();
     s_text[0] = '\0';
     refresh();
@@ -143,9 +147,9 @@ static void stop_recording(void)
     s_tick  = lv_tick_get();
     refresh();
 
-    /* 请求识别：复用 A08（真接麦后改成"结束上行 + 请求转写"）*/
-    ui_intent_cb_t cb = ui_main_get_intent_cb();
-    if (cb) cb(UI_ICON_MIC);
+    /* 通知网关停止录音并转写（真接 I2S 麦后改成"结束上行 + 请求转写"）*/
+    ui_mic_cb_t mic = ui_main_get_mic_cb();
+    if (mic) mic(false);
 }
 
 static void on_mic_clicked(lv_event_t *e)

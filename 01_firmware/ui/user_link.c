@@ -87,6 +87,20 @@ void link_send_text(const char *text)
         HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)n, 100);
     }
 }
+/** 通知网关开始/结束录音（电脑麦克风兜底方案用）
+ *  为什么要分 start/stop：用户说的话在按开始与按停止之间，
+ *  等停止才录音就录不到人声了。*/
+void link_send_mic_ctrl(bool start)
+{
+    char buf[48];
+    s_req_id = (uint8_t)((s_req_id + 1) & 0xFF);
+    s_pending = UI_ICON_MIC;
+    int n = snprintf(buf, sizeof(buf), "OV+AI=%u,A08,%s\r\n",
+                     (unsigned)s_req_id, start ? "start" : "stop");
+    if (n > 0) {
+        HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)n, 100);
+    }
+}
 
 /* ═══════════════════════ 接收 ═══════════════════════ */
 
@@ -199,9 +213,15 @@ static void link_poll_timer(lv_timer_t *t)
 
 /* ═══════════════════════ 意图回调（UI → 链路）═══════════════════════ */
 
+static void on_ui_mic(bool start)
+{
+    link_send_mic_ctrl(start);
+}
+
 static void on_ui_text(const char *text)
 {
     link_send_text(text);
+}
 }
 
 static void on_ui_intent(ui_icon_t kind)
@@ -219,6 +239,7 @@ void link_init(void)
     /* UI 点意图时回调到这里（UI 本身不需要知道串口的存在） */
     ui_main_set_intent_cb(on_ui_intent);
     ui_main_set_text_cb(on_ui_text);   /* 录音页确认发送 */
+    ui_main_set_mic_cb(on_ui_mic);     /* 录音开始/结束 */
 
     /* 启动中断接收 */
     HAL_UART_Receive_IT(&huart1, &s_rx_byte, 1);

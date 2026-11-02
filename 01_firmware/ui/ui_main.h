@@ -38,6 +38,15 @@ typedef void (*ui_text_cb_t)(const char *text);
 void ui_main_set_text_cb(ui_text_cb_t cb);
 ui_text_cb_t ui_main_get_text_cb(void);
 
+/**
+ * 录音控制回调：开始 / 结束录音。
+ * 用电脑麦克风兜底时，必须告诉网关"现在开始录"和"现在停止并转写"——
+ * 等按下停止才开始录的话，用户说的话已经过去了，录不到。
+ */
+typedef void (*ui_mic_cb_t)(bool start);
+void ui_main_set_mic_cb(ui_mic_cb_t cb);
+ui_mic_cb_t ui_main_get_mic_cb(void);
+
 /* 注：切页统一走 ui_stage（ui_stage_show_home / ui_stage_lock），
    所以这里不再暴露 ui_main_show()。 */
 

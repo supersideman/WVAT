@@ -35,6 +35,9 @@ void link_send_intent(ui_icon_t kind);
  */
 void link_send_text(const char *text);
 
+/** 通知网关开始/结束录音（A08,start / A08,stop）*/
+void link_send_mic_ctrl(bool start);
+
 /** 图标 → 协议动作码（A01/A03/A07/A08） */
 const char *link_code_of(ui_icon_t kind);
 

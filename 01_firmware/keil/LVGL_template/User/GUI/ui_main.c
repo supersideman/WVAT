@@ -29,6 +29,7 @@ static lv_obj_t *s_res_slot_status;   /* 右侧状态容器 */
 
 static ui_intent_cb_t s_intent_cb = NULL;   /* 链路层注册的意图回调（可为空）*/
 static ui_text_cb_t   s_text_cb   = NULL;   /* 录音页确认发送时用 */
+static ui_mic_cb_t    s_mic_cb    = NULL;   /* 录音开始/结束（电脑麦克风兜底）*/
 
 /* ───────────────── 工具 ───────────────── */
 
@@ -213,6 +214,16 @@ void ui_main_set_text_cb(ui_text_cb_t cb)
 ui_text_cb_t ui_main_get_text_cb(void)
 {
     return s_text_cb;
+}
+
+void ui_main_set_mic_cb(ui_mic_cb_t cb)
+{
+    s_mic_cb = cb;
+}
+
+ui_mic_cb_t ui_main_get_mic_cb(void)
+{
+    return s_mic_cb;
 }
 
 void ui_main_set_result(ui_icon_t intent, bool ok)
