@@ -662,11 +662,6 @@
               <FilePath>..\User\GUI\ui.c</FilePath>
             </File>
             <File>
-              <FileName>ui_HomePage.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\User\GUI\screens\ui_HomePage.c</FilePath>
-            </File>
-            <File>
               <FileName>ui_main.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\GUI\ui_main.c</FilePath>

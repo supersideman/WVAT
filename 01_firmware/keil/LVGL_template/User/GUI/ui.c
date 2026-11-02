@@ -36,5 +36,5 @@ void ui_init(void)
 
 void ui_destroy(void)
 {
-    ui_HomePage_screen_destroy();
+    /* 作者示例界面已从工程移除，这里不再需要销毁 */
 }
