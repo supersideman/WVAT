@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file    ui_icons.c
  * @brief   纯图元图标库实现 · LVGL 8.2
  *
@@ -40,31 +40,61 @@ static lv_obj_t *ring(lv_obj_t *p, int cx, int cy, int r, int w, uint32_t color)
 }
 
 /* ⚠️ lv_line 保存的是**指针**，不会拷贝点数组。
- * 所以每条线段都要有自己独立的静态数组——共用会导致后画的覆盖先画的
- * （曾踩过：对勾最后只剩一笔）。以下每个图标函数内部的 static 数组互不影响。 */
+ * 所以每条线段都要有自己独立的点数组——共用会导致后画的覆盖先画的
+ * （曾踩过：对勾最后只剩一笔）。
+ * 现在的做法：polyline() 内部自己分配一份点数组，线段销毁时释放，
+ * 调用方传进来的 static 数组只当"临时草稿"，不再被 lv_line 长期持有。 */
+
+/** 线段对象被删除时，把为它分配的点数组还回去 */
+static void line_del_cb(lv_event_t *e)
+{
+    void *buf = lv_event_get_user_data(e);
+    if (buf) lv_mem_free(buf);
+}
 
 /**
- * 画折线。
+ * 画折线（坐标系已彻底理顺版）。
  *
- * ⚠️ 两个必须注意的点（都踩过）：
- *  1. lv_line 的坐标是**相对它自己左上角**的，而各图标函数传进来的点是
- *     相对父容器的绝对坐标。所以这里让线段对象铺满父容器（100%×100%），
- *     绝对坐标就直接对上了。
- *  2. lv_line 默认是**可点击**且带主题样式。若不改，它会盖在父容器上抢点击，
- *     还会因为默认尺寸太小把线**裁掉**——表现就是"对勾跑到了左上角"。
+ * 坑与解法：
+ *  1. lv_line 的绘制是 `点坐标 + 对象坐标`。若对象位置/尺寸与点的包围盒不匹配，
+ *     线条就会错位甚至被裁掉——之前"对勾跑到按钮左上角"就是这个原因。
+ *     现在：算出点的包围盒 → 把对象正好套在包围盒上 → 点转成相对坐标。
+ *     这样无论父容器怎么变，线条都精确落在该在的位置。
+ *  2. lv_line 默认可点击且带主题样式，会抢父容器点击，这里一并清掉。
  */
 static lv_obj_t *polyline(lv_obj_t *p, lv_point_t *pts, uint16_t n,
                           int w, uint32_t color)
 {
+    if (n < 2) return NULL;
+
+    /* 包围盒 */
+    int minx = pts[0].x, maxx = pts[0].x;
+    int miny = pts[0].y, maxy = pts[0].y;
+    for (uint16_t i = 1; i < n; i++) {
+        if (pts[i].x < minx) minx = pts[i].x;
+        if (pts[i].x > maxx) maxx = pts[i].x;
+        if (pts[i].y < miny) miny = pts[i].y;
+        if (pts[i].y > maxy) maxy = pts[i].y;
+    }
+
+    lv_point_t *buf = lv_mem_alloc(sizeof(lv_point_t) * n);
+    if (!buf) return NULL;
+    for (uint16_t i = 0; i < n; i++) {
+        buf[i].x = pts[i].x - minx;
+        buf[i].y = pts[i].y - miny;
+    }
+
     lv_obj_t *l = lv_line_create(p);
     lv_obj_remove_style_all(l);
-    lv_obj_set_pos(l, 0, 0);
-    lv_obj_set_size(l, LV_PCT(100), LV_PCT(100));
     lv_obj_clear_flag(l, LV_OBJ_FLAG_CLICKABLE);
-    lv_line_set_points(l, pts, n);
+    /* 留出线宽余量，避免端点被自身边界切掉一半 */
+    lv_obj_set_pos(l, minx - w, miny - w);
+    lv_obj_set_size(l, (maxx - minx) + 2 * w + 2, (maxy - miny) + 2 * w + 2);
+    lv_line_set_points(l, buf, n);
     lv_obj_set_style_line_color(l, COL(color), 0);
     lv_obj_set_style_line_width(l, w, 0);
     lv_obj_set_style_line_rounded(l, true, 0);
+    lv_obj_add_event_cb(l, line_del_cb, LV_EVENT_DELETE, buf);
     return l;
 }
 

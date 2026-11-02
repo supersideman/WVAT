@@ -131,19 +131,26 @@ def generate(font_path: str, size: int, charset: list[str], name: str, out_path:
     a("};")
     a("")
     a("static const uint16_t unicode_list[] = {")
-    for i in range(0, len(unicodes), 10):
-        chunk = ", ".join(f"0x{u:04x}" for u in unicodes[i:i + 10])
+    # ⚠️ LVGL 的稀疏表查找用的是"相对码"：
+    #     rcp = letter - cmaps[].range_start，再拿 rcp 去 unicode_list 里二分。
+    #     所以这里必须存 cp - range_start，而不是绝对码。
+    range_start = min(unicodes)
+    range_length = max(unicodes) - range_start
+    assert range_length <= 0xFFFF, "码点跨度超出 uint16 范围"
+    rel = [u - range_start for u in unicodes]
+    for i in range(0, len(rel), 10):
+        chunk = ", ".join(str(v) for v in rel[i:i + 10])
         a(f"    {chunk},")
     a("};")
     a("")
     a("static const lv_font_fmt_txt_cmap_t cmaps[] = {")
     a("    {")
-    a("        .range_start = 0x20,")
-    a("        .range_length = 0,")
+    a(f"        .range_start = 0x{range_start:04x},")
+    a(f"        .range_length = {range_length},")
     a("        .glyph_id_start = 1,")
     a("        .unicode_list = unicode_list,")
     a("        .glyph_id_ofs_list = NULL,")
-    a(f"        .list_length = {len(unicodes)},")
+    a(f"        .list_length = {len(rel)},")
     a("        .type = LV_FONT_FMT_TXT_CMAP_SPARSE_TINY,")
     a("    },")
     a("};")
