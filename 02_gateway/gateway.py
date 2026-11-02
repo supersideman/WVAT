@@ -212,15 +212,12 @@ class Gateway:
             print(f"  [识别] → {text}", flush=True)
             return "识别完成", P.STATUS_OK
 
-        # 没带 arg：退化为"录一小段再识别"（兼容不带参数的老调用）
-        try:
-            pcm, peak, rms = self.asr.record_and_transcribe(4.0)
-            text = pcm or self._fake_asr()
-        except Exception as exc:                      # noqa: BLE001
-            print(f"  [!] 录音/识别失败：{exc}", flush=True)
-            text = self._fake_asr()
-        self.ch.send_line(P.ev_frame("ASR", text))
-        return "识别完成", P.STATUS_OK
+        # 没带 arg：说明终端发的还是老式 A08。
+        # 这里**不猜、不兜底假数据**——明确报错，否则"看起来在跑、其实是假的"，
+        # 排查时反而被误导（踩过：旧固件 + 假识别兜底，以为是新固件在工作）。
+        print("  [!] 收到不带 start/stop 的 A08：固件可能是旧版（请重新编译烧录）", flush=True)
+        self.ch.send_line(P.ar_frame(0, P.STATUS_ERR, "固件需更新"))
+        return "固件需更新（A08 缺 start/stop）", P.STATUS_ERR
 
     # ── 假 ASR（真识别接上前用它把流程跑通）──────────────────
     def _fake_asr(self) -> str:
