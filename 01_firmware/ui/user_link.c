@@ -222,7 +222,6 @@ static void on_ui_text(const char *text)
 {
     link_send_text(text);
 }
-}
 
 static void on_ui_intent(ui_icon_t kind)
 {
