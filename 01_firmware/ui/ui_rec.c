@@ -13,9 +13,9 @@
 
 #define COL(c) lv_color_hex(c)
 
-/* 中文字库（lv_conf.h 里 LV_FONT_SIMSUN_16_CJK = 1）
-   含 1000 个常用汉字，够显示日常语音指令 */
-LV_FONT_DECLARE(lv_font_simsun_16_cjk);
+/* 中文字库：由 05_scripts/gen_cn_font.py 从系统字体生成（14px，GB2312 一级汉字 3755 字）
+   不用 LVGL 自带的 simsun_16_cjk —— 它只有 1000 个常用偏旁，实测缺"帮开资现调"等常用字 */
+LV_FONT_DECLARE(lv_font_cn_14);
 
 typedef enum {
     REC_IDLE = 0,      /* 待机：等待按下录音键 */
@@ -222,7 +222,7 @@ static void build_screen(void)
     s_lbl_text = lv_label_create(s_scr);
     lv_obj_set_pos(s_lbl_text, UI_REC_TEXT_X, UI_REC_TEXT_Y);
     lv_obj_set_size(s_lbl_text, UI_REC_TEXT_W, UI_REC_TEXT_H);
-    lv_obj_set_style_text_font(s_lbl_text, &lv_font_simsun_16_cjk, 0);
+    lv_obj_set_style_text_font(s_lbl_text, &lv_font_cn_14, 0);
     lv_obj_set_style_text_color(s_lbl_text, COL(UI_C_TEXT), 0);
     lv_obj_set_style_text_align(s_lbl_text, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_lbl_text, LV_LABEL_LONG_WRAP);
