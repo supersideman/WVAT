@@ -1,6 +1,19 @@
 ﻿/**
  * @file    user_clock.c
- * @brief   真实时钟实现：LSE → RTC，1 秒刷新锁屏与主界面
+ * @brief   真实时钟：直接操作 STM32F4 的 RTC 寄存器（不依赖 HAL_RTC 模块）
+ *
+ * 为什么不用 HAL_RTC_xxx？
+ *   作者模板里没有配置 RTC，所以：
+ *     · stm32f4xx_hal_conf.h 里 HAL_RTC_MODULE_ENABLED 被注释掉
+ *     · Drivers/.../Src 下根本没有 stm32f4xx_hal_rtc.c / _rtc_ex.c
+ *     · 仓库里 OV_Watch 工程虽然有这两个文件，但它的 HAL 版本与模板不同
+ *   混入不同版本的 HAL 模块风险更大；而本项目对 RTC 的需求只有
+ *   "开 LSE、设预分频、读写时间日期、用一个备份寄存器存标记"，
+ *   直接写寄存器既短又可控。
+ *
+ * 硬件事实：FryPi 板上有 32.768kHz 晶振（.ioc 里 PC14/PC15 =
+ *   LSE-External-Oscillator），但模板的 SystemClock_Config 只开了 HSE，
+ *   LSE 从未被使能——这里自己打开。
  */
 #include "user_clock.h"
 
@@ -11,68 +24,98 @@
 #include "ui_lock.h"
 #include "ui_main.h"
 
-/* 备份寄存器 0 用作"时间已校准"的标记（掉电由 VBAT 维持；
-   FryPi 无电池，所以断电后标记会丢，下次由 PC 重新授时） */
-#define CLOCK_BKP_REG   RTC_BKP_DR0
-#define CLOCK_BKP_MAGIC 0xA5C3
+/* RTC 写保护解锁/上锁的固定魔数（参考 RM0383 §26.3.5）*/
+#define RTC_KEY1  0xCAu
+#define RTC_KEY2  0x53u
+#define RTC_LOCK  0xFFu
 
-static RTC_HandleTypeDef s_hrtc;
-static bool s_rtc_ok = false;      /* RTC 外设是否初始化成功 */
-static bool s_time_set = false;    /* RTC 里是否有有效时间 */
+/* 备份寄存器 0 里存"时间已校准"的标记 */
+#define CLOCK_BKP_MAGIC 0xA5C3u
 
-static char s_time_str[8]  = "--:--";
-static char s_date_str[8]  = "--/--";
+static bool s_rtc_ok = false;
+static bool s_time_set = false;
 
-/* ───────────────── RTC 初始化 ───────────────── */
+static char s_time_str[8] = "--:--";
+static char s_date_str[8] = "--/--";
+
+/* ───────────────── 小工具 ───────────────── */
+
+static uint8_t bcd2bin(uint8_t v) { return (uint8_t)((v >> 4) * 10u + (v & 0x0Fu)); }
+static uint8_t bin2bcd(uint8_t v) { return (uint8_t)(((v / 10u) << 4) | (v % 10u)); }
+
+static void rtc_unlock(void)
+{
+    RTC->WPR = RTC_KEY1;
+    RTC->WPR = RTC_KEY2;
+}
+
+static void rtc_lock(void)
+{
+    RTC->WPR = RTC_LOCK;
+}
+
+/** 进入初始化模式并写预分频；LSE=32768 → (127+1)*(255+1)=32768 → 1Hz */
+static bool rtc_enter_init(void)
+{
+    RTC->ISR |= RTC_ISR_INIT;
+    uint32_t timeout = 0x00100000u;
+    while ((RTC->ISR & RTC_ISR_INITF) == 0u) {
+        if (--timeout == 0u) return false;
+    }
+    RTC->PRER = (127u << 16) | 255u;
+    return true;
+}
+
+static void rtc_exit_init(void)
+{
+    RTC->ISR &= ~RTC_ISR_INIT;
+}
+
+/* ───────────────── 初始化 ───────────────── */
 
 void clock_init(void)
 {
-    /* ① 打开 PWR 时钟并允许访问备份域（RTC 与备份寄存器都在备份域） */
-    __HAL_RCC_PWR_CLK_ENABLE();
-    HAL_PWR_EnableBkUpAccess();
+    /* ① 使能 PWR 时钟并允许访问备份域（RTC 与备份寄存器都在备份域）*/
+    RCC->APB1ENR |= RCC_APB1ENR_PWREN;
+    (void)RCC->APB1ENR;                 /* 读一次，保证时钟稳定生效 */
+    PWR->CR |= PWR_CR_DBP;
 
-    /* ② 开启 LSE（板上有 32.768kHz 晶振，PC14/PC15 已由 CubeMX 配好） */
-    RCC_OscInitTypeDef osc = {0};
-    osc.OscillatorType = RCC_OSCILLATORTYPE_LSE;
-    osc.LSEState       = RCC_LSE_ON;
-    osc.PLL.PLLState   = RCC_PLL_NONE;
-    if (HAL_RCC_OscConfig(&osc) != HAL_OK) {
-        s_rtc_ok = false;
-        printf("[clock] LSE 启动失败，时钟不可用\r\n");
-        return;
-    }
+    /* ② 判断 RTC 是否已由固件配置过（看 BDCR 的时钟源与使能位）*/
+    bool configured = ((RCC->BDCR & RCC_BDCR_RTCEN) != 0u) &&
+                      ((RCC->BDCR & RCC_BDCR_RTCSEL) == RCC_BDCR_RTCSEL_0);
 
-    /* ③ 把 RTC 时钟源切到 LSE，并使能 RTC 外设时钟 */
-    RCC_PeriphCLKInitTypeDef pclk = {0};
-    pclk.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-    pclk.RTCClockSelection    = RCC_RTCCLKSOURCE_LSE;
-    if (HAL_RCCEx_PeriphCLKConfig(&pclk) != HAL_OK) {
-        s_rtc_ok = false;
-        printf("[clock] RTC 时钟源切换失败\r\n");
-        return;
-    }
-    __HAL_RCC_RTC_ENABLE();
+    if (!configured) {
+        printf("[clock] 首次配置 RTC，启动 LSE...\r\n");
 
-    /* ④ 初始化 RTC 外设
-       LSE = 32768Hz，异步预分频 127、同步预分频 255
-       → (127+1) × (255+1) = 32768 → 1Hz 计数 */
-    s_hrtc.Instance             = RTC;
-    s_hrtc.Init.HourFormat      = RTC_HOURFORMAT_24;
-    s_hrtc.Init.AsynchPrediv    = 127;
-    s_hrtc.Init.SynchPrediv     = 255;
-    s_hrtc.Init.OutPut          = RTC_OUTPUT_DISABLE;
-    s_hrtc.Init.OutPutPolarity  = RTC_OUTPUT_POLARITY_HIGH;
-    s_hrtc.Init.OutPutType      = RTC_OUTPUT_TYPE_OPENDRAIN;
-    if (HAL_RTC_Init(&s_hrtc) != HAL_OK) {
-        s_rtc_ok = false;
-        printf("[clock] HAL_RTC_Init 失败\r\n");
-        return;
+        /* 打开 LSE 外部晶振并等待起振 */
+        RCC->BDCR |= RCC_BDCR_LSEON;
+        uint32_t timeout = 0x00100000u;
+        while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0u) {
+            if (--timeout == 0u) {
+                printf("[clock] LSE 起振超时，时钟不可用（界面显示 --:--）\r\n");
+                return;
+            }
+        }
+
+        /* RTC 时钟源选 LSE（RTCSEL = 01），并使能 RTC */
+        RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | RCC_BDCR_RTCSEL_0;
+        RCC->BDCR |= RCC_BDCR_RTCEN;
+
+        /* 首次配置要写预分频：解锁 → 进初始化模式 → 退出 → 上锁 */
+        rtc_unlock();
+        if (!rtc_enter_init()) {
+            rtc_lock();
+            printf("[clock] RTC 初始化超时\r\n");
+            return;
+        }
+        rtc_exit_init();
+        rtc_lock();
+    } else {
+        printf("[clock] RTC 已配置过，直接使用\r\n");
     }
 
     s_rtc_ok = true;
-
-    /* ⑤ 看备份寄存器里的标记，判断时间是否曾经被校准过 */
-    s_time_set = (HAL_RTCEx_BKUPRead(&s_hrtc, CLOCK_BKP_REG) == CLOCK_BKP_MAGIC);
+    s_time_set = (RTC->BKP0R == CLOCK_BKP_MAGIC);
     printf("[clock] RTC 就绪，时间已校准=%d\r\n", (int)s_time_set);
 }
 
@@ -81,53 +124,49 @@ bool clock_is_set(void)
     return s_rtc_ok && s_time_set;
 }
 
-/* ───────────────── 设置时间 ───────────────── */
+/* ───────────────── 写时间 ───────────────── */
 
 void clock_set(uint16_t year, uint8_t month, uint8_t day,
                uint8_t hour, uint8_t minute, uint8_t second)
 {
     if (!s_rtc_ok) return;
 
-    /* 基本合法性检查：不合法就整帧丢弃，避免把 RTC 写成垃圾值 */
-    if (month < 1 || month > 12 || day < 1 || day > 31 ||
-        hour > 23 || minute > 59 || second > 59) {
+    if (month < 1u || month > 12u || day < 1u || day > 31u ||
+        hour > 23u || minute > 59u || second > 59u) {
         printf("[clock] 授时数据非法，忽略\r\n");
         return;
     }
 
-    RTC_TimeTypeDef t = {0};
-    t.Hours   = hour;
-    t.Minutes = minute;
-    t.Seconds = second;
-    t.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
-    t.StoreOperation = RTC_STOREOPERATION_RESET;
-    if (HAL_RTC_SetTime(&s_hrtc, &t, RTC_FORMAT_BIN) != HAL_OK) {
-        printf("[clock] 设置时间失败\r\n");
+    rtc_unlock();
+    if (!rtc_enter_init()) {
+        rtc_lock();
+        printf("[clock] 进入初始化模式失败\r\n");
         return;
     }
 
-    RTC_DateTypeDef d = {0};
-    d.Year    = (uint8_t)(year % 100);      /* RTC 只存两位年份 */
-    d.Month   = month;
-    d.Date    = day;
-    d.WeekDay = RTC_WEEKDAY_MONDAY;         /* 界面不显示星期，随便填合法值 */
-    if (HAL_RTC_SetDate(&s_hrtc, &d, RTC_FORMAT_BIN) != HAL_OK) {
-        printf("[clock] 设置日期失败\r\n");
-        return;
-    }
+    /* BCD 编码写入：TR = [时][分][秒]，DR = [年][月][日] */
+    RTC->TR = ((uint32_t)bin2bcd(hour)   << 16) |
+              ((uint32_t)bin2bcd(minute) << 8)  |
+               (uint32_t)bin2bcd(second);
+    RTC->DR = ((uint32_t)bin2bcd((uint8_t)(year % 100u)) << 16) |
+              ((uint32_t)bin2bcd(month)                  << 8)  |
+               (uint32_t)bin2bcd(day);
 
-    HAL_RTCEx_BKUPWrite(&s_hrtc, CLOCK_BKP_REG, CLOCK_BKP_MAGIC);
+    rtc_exit_init();
+    rtc_lock();
+
+    RTC->BKP0R = CLOCK_BKP_MAGIC;        /* 标记"时间已校准" */
     s_time_set = true;
+
     printf("[clock] 已对时 %02u:%02u:%02u %04u-%02u-%02u\r\n",
            hour, minute, second, year, month, day);
 }
 
-/* ───────────────── 读数与格式化 ───────────────── */
+/* ───────────────── 读时间与格式化 ───────────────── */
 
 const char *clock_time_str(void) { return s_time_str; }
 const char *clock_date_str(void) { return s_date_str; }
 
-/** 从 RTC 读一次，刷新两个字符串缓存 */
 static void clock_refresh_cache(void)
 {
     if (!clock_is_set()) {
@@ -136,26 +175,28 @@ static void clock_refresh_cache(void)
         return;
     }
 
-    RTC_TimeTypeDef t;
-    RTC_DateTypeDef d;
-    if (HAL_RTC_GetTime(&s_hrtc, &t, RTC_FORMAT_BIN) != HAL_OK) return;
-    /* ⚠️ 读日期必须在读时间之后、且中间不能停顿，否则 F4 的 RTC 影子寄存器会不同步 */
-    if (HAL_RTC_GetDate(&s_hrtc, &d, RTC_FORMAT_BIN) != HAL_OK) return;
+    /* 先读 TR 再读 DR：F4 会锁存影子寄存器，保证时间与日期取自同一瞬间 */
+    uint32_t tr = RTC->TR;
+    uint32_t dr = RTC->DR;
 
-    snprintf(s_time_str, sizeof(s_time_str), "%02u:%02u",
-             (unsigned)t.Hours, (unsigned)t.Minutes);
-    snprintf(s_date_str, sizeof(s_date_str), "%02u/%02u",
-             (unsigned)d.Month, (unsigned)d.Date);
+    uint8_t sec = bcd2bin((uint8_t)(tr & 0x7Fu));
+    uint8_t min = bcd2bin((uint8_t)((tr >> 8) & 0x7Fu));
+    uint8_t hr  = bcd2bin((uint8_t)((tr >> 16) & 0x3Fu));
+    uint8_t day = bcd2bin((uint8_t)(dr & 0x3Fu));
+    uint8_t mon = bcd2bin((uint8_t)((dr >> 8) & 0x1Fu));
+
+    (void)sec;                                  /* 界面只显示到分钟 */
+    snprintf(s_time_str, sizeof(s_time_str), "%02u:%02u", hr, min);
+    snprintf(s_date_str, sizeof(s_date_str), "%02u/%02u", mon, day);
 }
 
 /* ───────────────── 界面刷新 ───────────────── */
 
-/** 在 LVGL 任务上下文里跑（lv_timer 的安全上下文） */
+/** 在 LVGL 任务上下文里跑，所以可以安全地改控件 */
 static void clock_timer_cb(lv_timer_t *t)
 {
     (void)t;
     clock_refresh_cache();
-    /* 两个界面都更新；未创建的界面内部会自己判空 */
     ui_main_set_time(s_time_str, s_date_str);
     ui_lock_set_time(s_time_str, s_date_str);
 }
@@ -165,5 +206,5 @@ void clock_start_ui_timer(void)
     clock_refresh_cache();
     ui_main_set_time(s_time_str, s_date_str);
     ui_lock_set_time(s_time_str, s_date_str);
-    lv_timer_create(clock_timer_cb, 1000, NULL);   /* 每 1 秒刷新 */
+    lv_timer_create(clock_timer_cb, 1000, NULL);   /* 每 1 秒刷新一次 */
 }
