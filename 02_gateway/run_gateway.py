@@ -1,3 +1,13 @@
+# ── 解释器自检：必须用随附的 Python 3.12 ──────────────────
+# 原因：cffi / vosk 的 C 扩展按 cp312 编译，换解释器会报
+#       "No module named '_cffi_backend'"，且极难猜到原因（踩过：
+#       启动器路径被写成 ???，回退到系统 Python 3.15）。
+import sys as _sys
+if _sys.version_info[:2] != (3, 12):
+    print(f"[launcher] 需要 Python 3.12，当前是 {_sys.version.split()[0]}")
+    print(f"[launcher] 解释器：{_sys.executable}")
+    print("[launcher] 请用 02_gateway\\start_gateway.cmd 启动，不要直接双击 .py")
+    _sys.exit(2)
 """一键启动网关：自动找 CH340 串口 + 真执行模式。
 
 为什么需要它：
