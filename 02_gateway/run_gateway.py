@@ -80,6 +80,9 @@ import gateway  # noqa: E402
 argv = ["gateway.py", "--transport", "serial", "--serial-port", port]
 if not dry:
     argv.append("--enable-actions")
+# 默认启用电脑麦克风 + 本地识别；想用假识别就传 fake
+if "fake" not in sys.argv[1:]:
+    argv.append("--asr")
 sys.argv = argv
 print(f"[launcher] 启动网关：串口 {port}，{'演练模式' if dry else '真执行模式'}")
 raise SystemExit(gateway.main())

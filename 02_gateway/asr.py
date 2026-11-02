@@ -27,14 +27,65 @@ VENDOR = os.path.join(HERE, "..", "vendor")
 sys.path.insert(0, os.path.join(VENDOR, "_pylibs"))
 
 RATE = 16000
-MODEL_DIR = os.path.join(VENDOR, "models", "vosk-model-small-cn-0.22")
+MODEL_NAME = "vosk-model-small-cn-0.22"
+VENDOR_MODEL = os.path.abspath(os.path.join(VENDOR, "models", MODEL_NAME))
+ASCII_MODEL = r"C:\Users\Public\vosk-model-cn"      # Public：ASCII 且普通用户可写
+
+MODEL_DIR = ""                                       # 由 _resolve_model() 填充
 
 _model = None
 _recognizer = None
 
 
+def _is_ascii(path: str) -> bool:
+    return all(ord(c) < 128 for c in path)
+
+
+def _looks_like_model(path: str) -> bool:
+    return (os.path.isdir(path)
+            and os.path.isfile(os.path.join(path, "am", "final.mdl"))
+            and os.path.isfile(os.path.join(path, "conf", "mfcc.conf")))
+
+
+def _resolve_model() -> str:
+    """找一个可用的模型目录（**优先 ASCII 路径**），必要时从 vendor 拷一份。
+
+    ⚠️ vosk 底层是 C++（Kaldi），Windows 上用窄字符打开文件：
+       项目路径含「李思颉」时它会报 "does not contain model files"，
+       而模型其实是完整的。所以必须放到纯英文目录。
+    """
+    global MODEL_DIR
+    if MODEL_DIR:
+        return MODEL_DIR
+
+    for p in (os.environ.get("VOSK_MODEL_DIR", ""), ASCII_MODEL, VENDOR_MODEL):
+        if p and _looks_like_model(p) and _is_ascii(p):
+            MODEL_DIR = p
+            return MODEL_DIR
+
+    if _looks_like_model(VENDOR_MODEL):          # 只有中文路径 → 复制到 ASCII 目录
+        try:
+            import shutil
+
+            print(f"[asr] 模型在中文路径下（Vosk 打不开），复制到 {ASCII_MODEL} …", flush=True)
+            if os.path.isdir(ASCII_MODEL):
+                shutil.rmtree(ASCII_MODEL, ignore_errors=True)
+            shutil.copytree(VENDOR_MODEL, ASCII_MODEL)
+            MODEL_DIR = ASCII_MODEL
+            return MODEL_DIR
+        except Exception as exc:                 # noqa: BLE001
+            print(f"[asr] 复制失败：{exc}", flush=True)
+
+    MODEL_DIR = VENDOR_MODEL
+    return MODEL_DIR
+
+
 def model_ready() -> bool:
-    return os.path.isdir(MODEL_DIR)
+    return _looks_like_model(_resolve_model())
+
+
+def model_dir() -> str:
+    return _resolve_model()
 
 
 def _ensure_model():
@@ -45,7 +96,7 @@ def _ensure_model():
     import vosk
 
     vosk.SetLogLevel(-1)                      # 关掉它啰嗦的日志
-    _model = vosk.Model(MODEL_DIR)
+    _model = vosk.Model(_resolve_model())
     _recognizer = vosk.KaldiRecognizer(_model, RATE)
 
 
@@ -121,6 +172,10 @@ class LiveRecorder:
     def duration_ms(self) -> int:
         return int(len(self._buf) / 2 / self.rate * 1000)
 
+    def transcribe(self, pcm: bytes) -> str:
+        """转写一段 PCM（转发到模块级函数，方便调用方只持有一个对象）。"""
+        return transcribe(pcm)
+
 
 def transcribe(pcm: bytes) -> str:
     """把 PCM 喂给 Vosk，返回识别出的中文文本（可能为空串）。"""
@@ -134,7 +189,14 @@ def transcribe(pcm: bytes) -> str:
 
     res = json.loads(_recognizer.FinalResult())
     text = (res.get("text") or "").replace(" ", "")
+    # Vosk 会在句末加标点；显示和后续关键词匹配都不需要，去掉
+    text = text.strip("。，、！？；：,.!?;: ")
     return text
+
+
+def record_and_transcribe(seconds: float = 4.0, dev: int | None = None):
+    """录一段并识别，返回 (文本, peak, rms)。给"不带 start/stop 的老调用"兜底用。"""
+    return listen(seconds, dev)
 
 
 def listen(seconds: float = 4.0, dev: int | None = None) -> tuple[str, int, float]:

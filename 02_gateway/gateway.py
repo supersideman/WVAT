@@ -212,9 +212,13 @@ class Gateway:
             print(f"  [识别] → {text}", flush=True)
             return "识别完成", P.STATUS_OK
 
-        # 没带 arg：退化为"录一小段再识别"（兼容旧调用）
-        pcm, peak, rms = self.asr.record_and_transcribe(4.0)
-        text = pcm or self._fake_asr()
+        # 没带 arg：退化为"录一小段再识别"（兼容不带参数的老调用）
+        try:
+            pcm, peak, rms = self.asr.record_and_transcribe(4.0)
+            text = pcm or self._fake_asr()
+        except Exception as exc:                      # noqa: BLE001
+            print(f"  [!] 录音/识别失败：{exc}", flush=True)
+            text = self._fake_asr()
         self.ch.send_line(P.ev_frame("ASR", text))
         return "识别完成", P.STATUS_OK
 
@@ -324,7 +328,7 @@ def main() -> int:
             if not asr_mod.model_ready():
                 print("[asr] 模型缺失，改用假识别；请把 vosk-model-small-cn-0.22 放到 vendor/models/", flush=True)
             else:
-                asr = asr_mod
+                asr = asr_mod.LiveRecorder(dev=args.mic)
                 print(f"[asr] 已启用本地中文识别（默认设备：{args.mic if args.mic is not None else "系统默认"}）", flush=True)
         except Exception as exc:                      # noqa: BLE001
             print(f"[asr] 初始化失败，改用假识别：{exc}", flush=True)
