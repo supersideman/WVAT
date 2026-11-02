@@ -30,6 +30,7 @@ from transport import (DEFAULT_HOST, DEFAULT_PORT, SerialChannel,
 DEDUP_WINDOW = 10          # 记住最近 N 个 REQ_ID，重传不重复执行
 HEARTBEAT_SEC = 20
 MAX_MISSED_PONG = 3
+TIME_SYNC_SEC = 30         # 每 30 秒给手表授时一次（校正 RTC）
 
 # 慢通道兜底关键词（没有 LLM 也能工作）
 FALLBACK_KEYWORDS = [
@@ -51,6 +52,7 @@ class Gateway:
         self.last_req_id = 0        # 用于识别设备复位（REQ_ID 回退）
         self.missed_pong = 0
         self.last_ping = 0.0
+        self.last_time_sync = 0.0   # 上次授时时间（0 = 还没授过，下一轮就发）
         self.running = True
         self.counters = {"fast": 0, "slow": 0, "err": 0, "dedup": 0}
 
@@ -62,6 +64,12 @@ class Gateway:
                 self.on_line(line)
 
             now = time.time()
+
+            # 授时：启动后立刻发一次，之后每 30 秒一次（手表收到会写 RTC）
+            if getattr(self.ch, "connected", False) and now - self.last_time_sync > TIME_SYNC_SEC:
+                self.ch.send_line(P.time_event())
+                self.last_time_sync = now
+
             if getattr(self.ch, "connected", False) and now - self.last_ping > HEARTBEAT_SEC:
                 self.ch.send_line(P.ping_frame())
                 self.last_ping = now

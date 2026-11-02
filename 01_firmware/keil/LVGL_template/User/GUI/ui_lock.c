@@ -28,7 +28,7 @@ void ui_lock_build(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_lbl_time, UI_FONT_NUM44, 0);
     lv_obj_set_style_text_color(s_lbl_time, COL(UI_C_TEXT), 0);
     lv_obj_set_style_text_align(s_lbl_time, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(s_lbl_time, "10:24");
+    lv_label_set_text(s_lbl_time, "--:--");   /* 真实值由 user_clock 写入 */
 
     /* 日期 */
     s_lbl_date = lv_label_create(parent);
@@ -37,7 +37,7 @@ void ui_lock_build(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_lbl_date, UI_FONT_NUM14, 0);
     lv_obj_set_style_text_color(s_lbl_date, COL(UI_C_DIM), 0);
     lv_obj_set_style_text_align(s_lbl_date, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_text(s_lbl_date, "10/20");
+    lv_label_set_text(s_lbl_date, "--/--");
 }
 
 void ui_lock_set_time(const char *time_str, const char *date_str)

@@ -149,13 +149,13 @@ void ui_main_build(lv_obj_t *parent)
     lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* 时钟 */
+    /* 时钟：真实值由 user_clock 的 1s 定时器写入；未对时前显示占位符 */
     s_lbl_time = num_label(s_scr, 0, UI_TIME_Y, UI_W, UI_FONT_NUM44,
-                           UI_C_TEXT, "10:24");
+                           UI_C_TEXT, "--:--");
 
     /* 日期：纯数字，例如 "10/20"（不需要字库） */
     s_lbl_date = num_label(s_scr, 0, UI_DATE_Y, UI_W, UI_FONT_NUM14,
-                           UI_C_DIM, "10/20");
+                           UI_C_DIM, "--/--");
 
     /* 结果回执：一张卡片 + 左意图图标 + 右状态图标 */
     lv_obj_t *res = box(s_scr, UI_RESULT_X, UI_RESULT_Y, UI_RESULT_W, UI_RESULT_H,

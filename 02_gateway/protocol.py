@@ -58,6 +58,17 @@ def ev_frame(event: str, text: str = "") -> str:
     return f"OV+{KIND_EVT}={event},{clean_text(text)}{TERMINATOR}"
 
 
+def time_event(now=None) -> str:
+    """代理 → 终端：授时（终端收到后写入内部 RTC）。
+
+    格式：OV+EV=TIME,<HH:MM:SS>,<YYYY-MM-DD>
+    """
+    from datetime import datetime
+
+    now = now or datetime.now()
+    return ev_frame("TIME", f"{now:%H:%M:%S},{now:%Y-%m-%d}")
+
+
 def ping_frame() -> str:
     return f"OV+{KIND_PING}{TERMINATOR}"
 

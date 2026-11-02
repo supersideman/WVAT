@@ -19,7 +19,7 @@ $uv = Join-Path $proj "MDK-ARM\LCD.uvprojx"
 $p = Get-Content $uv -Raw
 
 # 需要参与编译的 .c（新增文件必须列进来，否则 Keil 根本不会编它）
-$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c")
+$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c", "user_clock.c")
 
 $missing = @()
 foreach ($c in $needC) { if ($p -notmatch [regex]::Escape($c)) { $missing += $c } }
@@ -60,6 +60,9 @@ if ($u -notmatch 'user_link\.h') {
 if ($u -notmatch 'ui_stage\.h') {
     $u = $u -replace '#include\s+"user_link\.h"', "#include `"user_link.h`"`r`n#include `"ui_stage.h`""
 }
+if ($u -notmatch 'user_clock\.h') {
+    $u = $u -replace '#include\s+"ui_stage\.h"', "#include `"ui_stage.h`"`r`n#include `"user_clock.h`""
+}
 
 # 开机：初始化舞台（锁屏 + 主界面在同一个可拖动容器里）
 if ($u -match 'ui_lock_create\(\)') {
@@ -74,12 +77,17 @@ elseif ($u -match 'ui_main_create\(\)') {
 if ($u -notmatch 'link_init\s*\(\s*\)') {
     $u = $u -replace '(lv_disp_load_scr\(ui_stage_screen\(\)\);)', "`$1`r`n    link_init();   /* 启动 USART1 指令链路 */"
 }
+
+# 真实时钟：初始化 RTC + 建 1 秒刷新定时器（必须在界面建好之后）
+if ($u -notmatch 'clock_init\s*\(\s*\)') {
+    $u = $u -replace '(link_init\(\);[^\r\n]*)', "`$1`r`n    clock_init();            /* 开 LSE，初始化内部 RTC */`r`n    clock_start_ui_timer();  /* 每 1 秒刷新锁屏与主界面 */"
+}
 Set-Content -Path $uic -Value $u -NoNewline
-Write-Output "[3] ui.c: 开机初始化舞台 + link_init()"
+Write-Output "[3] ui.c: 舞台 + link_init() + RTC 时钟"
 
 # ── 4. 自检 ─────────────────────────────────────────────
 Write-Output "`n=== ui_init 现在长这样 ==="
-(Get-Content $uic -Raw) -split "`n" | Select-String -Pattern "include|stage|load_scr|link_init" | ForEach-Object { "  " + $_.Line.Trim() }
+(Get-Content $uic -Raw) -split "`n" | Select-String -Pattern "include|stage|load_scr|link_init|clock_" | ForEach-Object { "  " + $_.Line.Trim() }
 
 Write-Output "`n=== 工程里我们的 .c ==="
-Select-String -Path $uv -Pattern "ui_stage\.c|ui_lock\.c|ui_drawer\.c|user_link\.c|ui_icons\.c|ui_main\.c" | ForEach-Object { "  " + $_.Line.Trim() }
+Select-String -Path $uv -Pattern "user_clock\.c|ui_stage\.c|ui_lock\.c|ui_drawer\.c|user_link\.c|ui_icons\.c|ui_main\.c" | ForEach-Object { "  " + $_.Line.Trim() }

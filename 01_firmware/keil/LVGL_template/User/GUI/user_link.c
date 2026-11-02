@@ -11,6 +11,7 @@
 #include "main.h"
 #include "usart.h"      /* huart1 */
 #include "ui_main.h"
+#include "user_clock.h" /* clock_set：PC 授时 */
 
 #define LINK_LINE_MAX   96
 #define LINK_POLL_MS    30
@@ -23,6 +24,11 @@ static volatile uint16_t s_len = 0;
 /* 中断 → 主循环 的一格信箱：够用且绝不阻塞 */
 static volatile bool s_ar_ready = false;   /* 收到一条 AR */
 static volatile bool s_ar_ok    = false;   /* 该 AR 是否 OK */
+
+/* 授时信箱：ISR 里只存数据，真正写 RTC 交给定时器 */
+static volatile bool     s_time_ready = false;
+static volatile uint16_t s_time_h = 0, s_time_m = 0, s_time_s = 0;
+static volatile uint16_t s_time_y = 0, s_time_mon = 0, s_time_day = 0;
 
 /* ── 发送侧 ───────────────────────────────────────────── */
 static uint8_t    s_req_id  = 0;
@@ -63,22 +69,40 @@ void link_send_intent(ui_icon_t kind)
 
 /* ═══════════════════════ 接收 ═══════════════════════ */
 
-/** 解析一条完整行：只认 OV+AR=<id>,<STATUS>,... */
+/**
+ * 解析一条完整行。
+ * 认识两种帧：
+ *   OV+AR=<id>,<STATUS>,<TEXT>            指令回执
+ *   OV+EV=TIME,<HH:MM:SS>,<YYYY-MM-DD>    PC 授时（用于校正 RTC）
+ */
 static void link_parse_line(char *line)
 {
-    if (strncmp(line, "OV+AR=", 6) != 0) {
-        return;                        /* 其它帧先忽略（EV/PONG 等以后再用） */
-    }
-
-    unsigned id = 0;
-    char status[8] = {0};
-    if (sscanf(line + 6, "%u,%7[^,]", &id, status) < 2) {
+    if (strncmp(line, "OV+AR=", 6) == 0) {
+        unsigned id = 0;
+        char status[8] = {0};
+        if (sscanf(line + 6, "%u,%7[^,]", &id, status) < 2) {
+            return;
+        }
+        /* 中断上下文只置标志，UI 更新交给定时器 */
+        s_ar_ok    = (strcmp(status, "OK") == 0);
+        s_ar_ready = true;
         return;
     }
 
-    /* 中断上下文只置标志，UI 更新交给定时器 */
-    s_ar_ok    = (strcmp(status, "OK") == 0);
-    s_ar_ready = true;
+    if (strncmp(line, "OV+EV=TIME,", 11) == 0) {
+        unsigned h = 0, mi = 0, sec = 0, y = 0, mon = 0, day = 0;
+        if (sscanf(line + 11, "%u:%u:%u,%u-%u-%u",
+                   &h, &mi, &sec, &y, &mon, &day) == 6) {
+            /* RTC 的写操作要等同步标志，耗时较长，不能在中断里做，
+               所以只把数据放进信箱，由 30ms 定时器真正写入 */
+            s_time_h = h; s_time_m = mi; s_time_s = sec;
+            s_time_y = y; s_time_mon = mon; s_time_day = day;
+            s_time_ready = true;
+        }
+        return;
+    }
+
+    /* 其它帧（PING/PONG 等）忽略 */
 }
 
 /** USART1 单字节接收完成中断（HAL 的 __weak 回调，这里覆盖它） */
@@ -119,6 +143,15 @@ void USART1_IRQHandler(void)
 static void link_poll_timer(lv_timer_t *t)
 {
     (void)t;
+
+    /* ① PC 授时到达 → 写入 RTC（写 RTC 要等同步标志，不能放中断里） */
+    if (s_time_ready) {
+        s_time_ready = false;
+        clock_set((uint16_t)s_time_y, (uint8_t)s_time_mon, (uint8_t)s_time_day,
+                  (uint8_t)s_time_h, (uint8_t)s_time_m, (uint8_t)s_time_s);
+    }
+
+    /* ② 指令回执到达 → 更新回执横条与抽屉圆点 */
     if (s_ar_ready) {
         s_ar_ready = false;
         ui_main_set_result(s_pending, s_ar_ok);
