@@ -133,11 +133,16 @@
    · 上限 10 秒：语音指令 2~5 秒够用，10 秒是宽容上限；
      真正的约束在链路——16kHz/16bit 音频要 32KB/s，串口必须提到 460800。
    · 下限 0.3 秒：太短视为误触，直接丢弃，不发给网关。
-   · 录制中在顶部显示已录时长，让用户知道"还在录"和"快到头了"。*/
+   · 剩余时间用**环绕录音键的圆环**表示（走完一圈=到上限），
+     不用数字——数字要占顶部空间，还挤到了返回键。*/
 #define UI_REC_MAX_MS    10000
 #define UI_REC_MIN_MS    300
-#define UI_REC_TIMER_X   (UI_W - 52)   /* 顶部右侧的计时文字 */
-#define UI_REC_TIMER_Y   5
+
+/* 环绕录音键的倒计时圆环 */
+#define UI_REC_ARC_SIZE  80
+#define UI_REC_ARC_WIDTH 4
+#define UI_REC_ARC_X     (UI_W / 2 - UI_REC_ARC_SIZE / 2)
+#define UI_REC_ARC_Y     (UI_REC_BTN_Y + UI_REC_MIC_SIZE / 2 - UI_REC_ARC_SIZE / 2)
 
 /* 转写文字显示上限：文字区 4 行 × 约 15 字 ≈ 60 汉字。
    协议 MAX_TEXT_BYTES=60（20 汉字）更严格，所以正常不会溢出；

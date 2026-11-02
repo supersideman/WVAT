@@ -28,7 +28,7 @@ static lv_obj_t *s_scr = NULL;
 static lv_obj_t *s_prev_scr = NULL;
 static lv_obj_t *s_wave[UI_REC_WAVE_BARS];
 static lv_obj_t *s_lbl_text = NULL;
-static lv_obj_t *s_lbl_timer = NULL;     /* 顶部右侧：已录时长 */
+static lv_obj_t *s_arc = NULL;           /* 环绕录音键的倒计时圆环 */
 static lv_obj_t *s_btn_mic = NULL;
 static lv_obj_t *s_grp_confirm = NULL;   /* 确认/取消两个按钮的容器 */
 
@@ -76,10 +76,10 @@ static void set_bars(int h)
 
 static void refresh(void)
 {
-    /* 计时标签只在录音态显示 */
-    if (s_lbl_timer) {
-        if (s_state == REC_RECORDING) lv_obj_clear_flag(s_lbl_timer, LV_OBJ_FLAG_HIDDEN);
-        else                          lv_obj_add_flag(s_lbl_timer, LV_OBJ_FLAG_HIDDEN);
+    /* 倒计时圆环只在录音态显示 */
+    if (s_arc) {
+        if (s_state == REC_RECORDING) lv_obj_clear_flag(s_arc, LV_OBJ_FLAG_HIDDEN);
+        else                          lv_obj_add_flag(s_arc, LV_OBJ_FLAG_HIDDEN);
     }
 
     switch (s_state) {
@@ -209,10 +209,17 @@ static void rec_timer_cb(lv_timer_t *t)
             lv_obj_set_y(s_wave[i], UI_REC_WAVE_CY - h / 2);
         }
 
-        /* 顶部显示已录时长，例如 "3.2s"（同时让用户知道快到 10 秒上限）*/
-        if (s_lbl_timer) {
-            lv_label_set_text_fmt(s_lbl_timer, "%u.%us",
-                                  (unsigned)(dur / 1000u), (unsigned)((dur % 1000u) / 100u));
+        /* 圆环倒计时：剩余比例越小环越短，颜色由青→黄→红
+           （只看一眼就知道还能说多久，不占顶部空间）*/
+        if (s_arc) {
+            uint32_t remain = (dur >= UI_REC_MAX_MS) ? 0u : (UI_REC_MAX_MS - dur);
+            int pct = (int)((remain * 100u) / UI_REC_MAX_MS);
+            lv_arc_set_value(s_arc, pct);
+
+            uint32_t col = (pct > 30) ? UI_C_ACCENT
+                         : (pct > 10) ? UI_C_WARN
+                                      : UI_C_DANGER;
+            lv_obj_set_style_arc_color(s_arc, COL(col), LV_PART_INDICATOR);
         }
     } else if (s_state == REC_WAITING) {
         /* 等太久没结果 → 视为识别失败，直接回待机（真接麦后可换成提示）*/
@@ -244,14 +251,6 @@ static void build_screen(void)
     lv_obj_set_style_bg_color(back, COL(UI_C_PRESSED), LV_STATE_PRESSED);
     lv_obj_add_event_cb(back, on_back_clicked, LV_EVENT_CLICKED, NULL);
 
-    /* 已录时长（仅录音时显示，让用户知道快到 10 秒上限）*/
-    s_lbl_timer = lv_label_create(s_scr);
-    lv_obj_set_pos(s_lbl_timer, UI_REC_TIMER_X, UI_REC_TIMER_Y);
-    lv_obj_set_style_text_font(s_lbl_timer, &lv_font_cn_14, 0);
-    lv_obj_set_style_text_color(s_lbl_timer, COL(UI_C_WARN), 0);
-    lv_label_set_text(s_lbl_timer, "");
-    lv_obj_add_flag(s_lbl_timer, LV_OBJ_FLAG_HIDDEN);
-
     /* 波形 */
     int total = (UI_REC_WAVE_BARS - 1) * UI_REC_WAVE_GAP;
     int x0 = UI_W / 2 - total / 2;
@@ -272,6 +271,27 @@ static void build_screen(void)
     lv_obj_set_style_text_align(s_lbl_text, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(s_lbl_text, LV_LABEL_LONG_WRAP);
     lv_label_set_text(s_lbl_text, "");
+
+    /* 倒计时圆环：环绕录音键，先创建所以位于按钮下层 */
+    s_arc = lv_arc_create(s_scr);
+    lv_obj_set_size(s_arc, UI_REC_ARC_SIZE, UI_REC_ARC_SIZE);
+    lv_obj_set_pos(s_arc, UI_REC_ARC_X, UI_REC_ARC_Y);
+    lv_obj_clear_flag(s_arc, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_style(s_arc, NULL, LV_PART_KNOB);      /* 去掉旋钮 */
+    lv_obj_set_style_bg_opa(s_arc, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_arc_set_rotation(s_arc, 270);                     /* 从 12 点方向开始 */
+    lv_arc_set_bg_angles(s_arc, 0, 360);                 /* 整圈 */
+    lv_arc_set_range(s_arc, 0, 100);
+    lv_arc_set_value(s_arc, 100);
+    /* 背景轨道（暗）*/
+    lv_obj_set_style_arc_color(s_arc, COL(UI_C_CARD), LV_PART_MAIN);
+    lv_obj_set_style_arc_width(s_arc, UI_REC_ARC_WIDTH, LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(s_arc, true, LV_PART_MAIN);
+    /* 剩余指示（亮）*/
+    lv_obj_set_style_arc_color(s_arc, COL(UI_C_ACCENT), LV_PART_INDICATOR);
+    lv_obj_set_style_arc_width(s_arc, UI_REC_ARC_WIDTH, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(s_arc, true, LV_PART_INDICATOR);
+    lv_obj_add_flag(s_arc, LV_OBJ_FLAG_HIDDEN);
 
     /* 录音大圆键（居中） */
     s_btn_mic = mk_box(s_scr, UI_W / 2 - UI_REC_MIC_SIZE / 2, UI_REC_BTN_Y,
