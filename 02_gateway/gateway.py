@@ -85,7 +85,12 @@ class Gateway:
     def on_line(self, line: str) -> None:
         frame = P.parse(line)
         if frame is None:
-            print(f"[忽略] 无法解析：{line!r}", flush=True)
+            # 固件的 printf 调试日志走同一条串口（形如 "[clock] ..."），
+            # 它不是协议帧，但对我们很有用，单独标出来而不是当成坏帧报警。
+            if line.startswith("["):
+                print(f"[设备] {line}", flush=True)
+            else:
+                print(f"[忽略] 无法解析：{line!r}", flush=True)
             return
 
         if frame.kind == P.KIND_PONG:

@@ -126,6 +126,24 @@ bool clock_is_set(void)
 
 /* ───────────────── 写时间 ───────────────── */
 
+/** 新时间与当前 RTC 时间是否已足够接近（避免每 30 秒重复写 + 刷日志）*/
+static bool clock_almost_same(uint8_t hour, uint8_t minute, uint8_t second)
+{
+    if (!clock_is_set()) return false;
+
+    uint32_t tr = RTC->TR;
+    uint8_t s = bcd2bin((uint8_t)(tr & 0x7Fu));
+    uint8_t m = bcd2bin((uint8_t)((tr >> 8) & 0x7Fu));
+    uint8_t h = bcd2bin((uint8_t)((tr >> 16) & 0x3Fu));
+
+    int32_t a = (int32_t)hour * 3600 + (int32_t)minute * 60 + (int32_t)second;
+    int32_t b = (int32_t)h * 3600 + (int32_t)m * 60 + (int32_t)s;
+    int32_t d = a - b;
+    if (d < 0) d = -d;
+    if (d > 12 * 3600) d = 24 * 3600 - d;      /* 跨午夜也算接近 */
+    return d <= 2;
+}
+
 void clock_set(uint16_t year, uint8_t month, uint8_t day,
                uint8_t hour, uint8_t minute, uint8_t second)
 {
@@ -134,6 +152,11 @@ void clock_set(uint16_t year, uint8_t month, uint8_t day,
     if (month < 1u || month > 12u || day < 1u || day > 31u ||
         hour > 23u || minute > 59u || second > 59u) {
         printf("[clock] 授时数据非法，忽略\r\n");
+        return;
+    }
+
+    /* 网关每 30 秒授时一次；时间没跑偏就什么都不做，避免无谓写入与刷屏 */
+    if (clock_almost_same(hour, minute, second)) {
         return;
     }
 
