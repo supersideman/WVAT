@@ -48,13 +48,18 @@ def build_charset(kind: str, with_ascii: bool) -> list[str]:
 
 
 def pack_1bpp(img: Image.Image) -> bytes:
-    """把 mode='1' 图像按行打包成 1bpp，每行字节对齐，MSB 在前。"""
+    """把 mode='1' 图像打包成 LVGL 要求的 1bpp 位图。
+
+    ⚠️ 关键：LVGL 的字体位图是**连续比特流**，行与行之间**不做字节对齐**。
+       它的取位方式是 bit_ofs = y * (box_w * bpp) + x * bpp，
+       所以每行末尾不补齐——补了齐会让每个字错位成"点阵雪花"。
+    """
     w, h = img.size
     pixels = img.load()
     out = bytearray()
+    byte = 0
+    bits = 0
     for y in range(h):
-        byte = 0
-        bits = 0
         for x in range(w):
             byte = (byte << 1) | (1 if pixels[x, y] else 0)
             bits += 1
@@ -62,8 +67,8 @@ def pack_1bpp(img: Image.Image) -> bytes:
                 out.append(byte)
                 byte = 0
                 bits = 0
-        if bits:                       # 补齐到整字节
-            out.append(byte << (8 - bits))
+    if bits:                      # 整个字形的末尾补到整字节
+        out.append(byte << (8 - bits))
     return bytes(out)
 
 
