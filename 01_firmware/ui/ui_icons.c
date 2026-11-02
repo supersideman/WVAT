@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file    ui_icons.c
  * @brief   纯图元图标库实现 · LVGL 8.2
  *
@@ -43,10 +43,24 @@ static lv_obj_t *ring(lv_obj_t *p, int cx, int cy, int r, int w, uint32_t color)
  * 所以每条线段都要有自己独立的静态数组——共用会导致后画的覆盖先画的
  * （曾踩过：对勾最后只剩一笔）。以下每个图标函数内部的 static 数组互不影响。 */
 
+/**
+ * 画折线。
+ *
+ * ⚠️ 两个必须注意的点（都踩过）：
+ *  1. lv_line 的坐标是**相对它自己左上角**的，而各图标函数传进来的点是
+ *     相对父容器的绝对坐标。所以这里让线段对象铺满父容器（100%×100%），
+ *     绝对坐标就直接对上了。
+ *  2. lv_line 默认是**可点击**且带主题样式。若不改，它会盖在父容器上抢点击，
+ *     还会因为默认尺寸太小把线**裁掉**——表现就是"对勾跑到了左上角"。
+ */
 static lv_obj_t *polyline(lv_obj_t *p, lv_point_t *pts, uint16_t n,
                           int w, uint32_t color)
 {
     lv_obj_t *l = lv_line_create(p);
+    lv_obj_remove_style_all(l);
+    lv_obj_set_pos(l, 0, 0);
+    lv_obj_set_size(l, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(l, LV_OBJ_FLAG_CLICKABLE);
     lv_line_set_points(l, pts, n);
     lv_obj_set_style_line_color(l, COL(color), 0);
     lv_obj_set_style_line_width(l, w, 0);
