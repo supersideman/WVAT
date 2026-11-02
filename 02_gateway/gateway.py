@@ -43,6 +43,35 @@ FALLBACK_KEYWORDS = [
     (("几点", "时间", "状态", "在线"), "A07"),
 ]
 
+# ── 模糊匹配用的相似度 ────────────────────────────────────
+def _similarity(a: str, b: str) -> float:
+    """返回 0~1 的相似度（1 = 完全相同）。
+
+    做法：取"编辑距离"和"最长公共子序列"两种口径里更高的那个，
+    这样既能容忍错字（资料→质量），也能容忍多说了几个字（请帮我打开一下资料）。
+
+    不用拼音库：要额外依赖，而项目原则是"零安装、纯本地"。
+    """
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    # 短句里出现，直接给高分（避免"打开桌面"和"打开资料"打平）
+    if b in a:
+        return 0.9
+
+    def lcs(x: str, y: str) -> int:
+        prev = [0] * (len(y) + 1)
+        for cx in x:
+            cur = [0]
+            for j, cy in enumerate(y, 1):
+                cur.append(prev[j - 1] + 1 if cx == cy else max(prev[j], cur[j - 1]))
+            prev = cur
+        return prev[-1]
+
+    return lcs(a, b) / max(len(a), len(b))
+
+
 
 
 class Gateway:
@@ -229,12 +258,37 @@ class Gateway:
         return self._fallback(text)
 
     def _fallback(self, text: str) -> str:
+        """本地关键词兜底：精确包含 → 模糊相似 → 放弃。
+
+        为什么需要模糊那一层：
+            小模型（42MB）对口音、语速、连读很敏感，常把「资料」听成「质量」、
+            「下一首」听成「下一手」。只做精确包含的话，差一个字就全崩。
+            这里用"编辑距离相似度"给每条关键词打分，超过阈值就认。
+        """
+        # ① 精确包含（最快、最准）
         for words, code in FALLBACK_KEYWORDS:
             if any(w in text for w in words):
-                action = WHITELIST[code]
-                ok, reply = self.ex.execute(code, "")
-                return reply if ok else f"执行失败：{reply}"
+                return self._run_code(code)
+
+        # ② 模糊匹配：整句与关键词的相似度
+        best_code, best_score, best_kw = "", 0.0, ""
+        for words, code in FALLBACK_KEYWORDS:
+            for w in words:
+                score = _similarity(text, w)
+                if score > best_score:
+                    best_code, best_score, best_kw = code, score, w
+
+        if best_score >= 0.5:
+            print(f"  [模糊匹配] 「{text}」≈「{best_kw}」({best_score:.2f}) → {best_code}", flush=True)
+            return self._run_code(best_code)
+
+        if best_score > 0:
+            print(f"  [模糊匹配] 最接近「{best_kw}」但只有 {best_score:.2f}，不执行", flush=True)
         return "没听懂，请再说一次"
+
+    def _run_code(self, code: str) -> str:
+        ok, reply = self.ex.execute(code, "")
+        return reply if ok else f"执行失败：{reply}"
 
     def _llm_intent(self, text: str) -> str:
         """调用 DeepSeek 把自由文本映射成动作码（返回值仍是白名单 code）。"""
