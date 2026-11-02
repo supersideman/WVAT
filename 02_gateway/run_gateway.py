@@ -50,13 +50,22 @@ def find_ch340() -> str:
 
 
 if not port:
-    port = find_ch340()
+    # 等板子插上：CH340 有时"设备枚举成功但没生成 COM 口"，拔插一次即恢复。
+    # 所以这里给 30 秒窗口，而不是立刻退出——插线顺序就不讲究了。
+    import time
+
+    wait_sec = 30
+    print(f"[launcher] 暂未发现串口，等待板子插上（最多 {wait_sec} 秒）…")
+    deadline = time.time() + wait_sec
+    while time.time() < deadline and not port:
+        time.sleep(0.5)
+        port = find_ch340()
 
 if not port:
     print("[launcher] 没找到 CH340 串口。")
-    print("  1) 确认板子上的「串口」Type-C 已插好")
-    print("  2) 或手动指定：python run_gateway.py COM13")
-    # 仍然列出当前所有串口，方便排查
+    print("  1) 确认板子上标着「串口」的那个 Type-C 已插好（不是标「USB」的那个）")
+    print("  2) 试试拔掉重插：有时设备枚举成功但端口没挂上，拔插一次即恢复")
+    print("  3) 或手动指定口号：python run_gateway.py COM13")
     try:
         from serial.tools import list_ports
         allp = list(list_ports.comports())
