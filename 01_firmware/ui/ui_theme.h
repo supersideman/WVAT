@@ -109,4 +109,24 @@
 #define UI_ST_HOLD_MS    1200  /* 结果显示多久后自动返回 */
 #define UI_ST_REC_MAX_MS 5000  /* 录音状态最多停留（没回执也要有结局）*/
 
+/* ── 录音页（语音主流程）──────────────────────────────────
+   布局：顶部返回 | 波形 | 转写文字 | 底部按钮 */
+#define UI_REC_TOP_H     26    /* 顶部条高度 */
+#define UI_REC_BACK_SIZE 24
+#define UI_REC_WAVE_CY   64    /* 波形中心 y */
+#define UI_REC_WAVE_BARS 13
+#define UI_REC_WAVE_W    4     /* 单条宽 */
+#define UI_REC_WAVE_GAP  9     /* 条间距（中心距）*/
+#define UI_REC_WAVE_HMIN 6     /* 静息高度 */
+#define UI_REC_WAVE_HMAX 34    /* 最大高度 */
+#define UI_REC_TEXT_Y    100   /* 转写文字区顶边 */
+#define UI_REC_TEXT_H    84    /* 文字区高度（约 4 行 16px）*/
+#define UI_REC_TEXT_X    14
+#define UI_REC_TEXT_W    (UI_W - 2 * UI_REC_TEXT_X)
+#define UI_REC_BTN_Y     196   /* 底部按钮区顶边 */
+#define UI_REC_BTN_H     56
+#define UI_REC_MIC_SIZE  64    /* 录音大圆键直径 */
+#define UI_REC_OK_W      96    /* 确认/取消按钮尺寸 */
+#define UI_REC_OK_GAP    16
+
 #endif /* UI_THEME_H */

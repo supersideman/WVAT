@@ -39,7 +39,17 @@ FALLBACK_KEYWORDS = [
     (("困", "睡", "锁屏", "休息"), "A03"),
     (("大声", "音量大", "调高"), "A04"),
     (("小声", "音量小", "调低", "静音"), "A05"),
+    (("资料", "文件", "桌面", "文件夹", "打开"), "A06"),
     (("几点", "时间", "状态", "在线"), "A07"),
+]
+
+# 假 ASR 用：轮流返回这几句（真 ASR 接上后整段删掉）
+FAKE_ASR_SENTENCES = [
+    "帮我打开资料",
+    "下一首",
+    "我困了",
+    "现在几点",
+    "把音量调高一点",
 ]
 
 
@@ -142,10 +152,14 @@ class Gateway:
             ok, text = self.ex.execute(code, arg)
             return (text, P.STATUS_OK) if ok else (f"执行失败：{text}", P.STATUS_ERR)
 
-        # A08 语音输入（P2 才接真 ASR，这里留钩子）
+        # A08 语音输入：目前用"假识别"把链路先跑通
+        # 真 ASR 接上后，这里换成"接收音频流 → 转写 → 同样用 EV=ASR 下发"即可
         if code == "A08":
             self.counters["slow"] += 1
-            return "语音识别待接入", P.STATUS_OK
+            text = self._fake_asr()
+            self.ch.send_line(P.ev_frame("ASR", text))
+            print(f"  [假识别] → {text}", flush=True)
+            return "识别完成", P.STATUS_OK
 
         # 慢通道：自由文本
         if code == "T":
@@ -154,6 +168,14 @@ class Gateway:
 
         self.counters["err"] += 1
         return "未知指令", P.STATUS_ERR
+
+    # ── 假 ASR（真识别接上前用它把流程跑通）──────────────────
+    def _fake_asr(self) -> str:
+        """轮流返回预设句子，模拟"识别出你说的话"。"""
+        idx = self.counters.get("fake_asr_idx", 0)
+        text = FAKE_ASR_SENTENCES[idx % len(FAKE_ASR_SENTENCES)]
+        self.counters["fake_asr_idx"] = idx + 1
+        return text
 
     def slow_channel(self, text: str) -> str:
         if self.use_llm:

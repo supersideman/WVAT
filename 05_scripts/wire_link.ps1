@@ -19,7 +19,7 @@ $uv = Join-Path $proj "MDK-ARM\LCD.uvprojx"
 $p = Get-Content $uv -Raw
 
 # 需要参与编译的 .c（新增文件必须列进来，否则 Keil 根本不会编它）
-$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c", "user_clock.c", "ui_status.c")
+$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c", "user_clock.c", "ui_status.c", "ui_rec.c")
 
 $missing = @()
 foreach ($c in $needC) { if ($p -notmatch [regex]::Escape($c)) { $missing += $c } }
@@ -48,6 +48,30 @@ if ($missing.Count -eq 0) {
             throw "XML 被改坏，已还原：$($_.Exception.Message)"
         }
     }
+}
+
+# ── 2b. 中文字库源文件也要参与编译（lv_conf 里 LV_FONT_SIMSUN_16_CJK=1）──
+$p = Get-Content $uv -Raw
+if ($p -notmatch 'lv_font_simsun_16_cjk\.c') {
+    $anchor2 = '(?s)<FileName>lv_font_montserrat_44\.c</FileName>\s*<FileType>1</FileType>\s*<FilePath>[^<]+</FilePath>\s*</File>'
+    $add2 = "`r`n            <File>`r`n              <FileName>lv_font_simsun_16_cjk.c</FileName>`r`n              <FileType>1</FileType>`r`n              <FilePath>..\Middlewares\LVGL\src\font\lv_font_simsun_16_cjk.c</FilePath>`r`n            </File>"
+    $eval2 = [System.Text.RegularExpressions.MatchEvaluator] { param($m) return $m.Value + $add2 }
+    $p3 = [regex]::Replace($p, $anchor2, $eval2, 1)
+    if ($p3 -ne $p) {
+        Copy-Item $uv "$uv.bak_font" -Force
+        Set-Content -Path $uv -Value $p3 -NoNewline
+        try {
+            [xml](Get-Content $uv -Raw) | Out-Null
+            Write-Output "[2b] ✅ 中文字库 lv_font_simsun_16_cjk.c 已加入编译组"
+        } catch {
+            Copy-Item "$uv.bak_font" $uv -Force
+            throw "XML 被改坏，已还原：$($_.Exception.Message)"
+        }
+    } else {
+        Write-Output "[2b] ⚠️ 没找到 montserrat_44 作锚点，需手动在 Keil 里添加中文字库文件"
+    }
+} else {
+    Write-Output "[2b] 中文字库已在工程里"
 }
 
 # ── 3. ui.c：开机进锁屏 + 启动指令链路 ──────────────────

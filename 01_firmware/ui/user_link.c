@@ -11,7 +11,8 @@
 #include "main.h"
 #include "usart.h"      /* huart1 */
 #include "ui_main.h"
-#include "user_clock.h" /* clock_set：PC 授时 */
+#include "user_clock.h"
+#include "ui_rec.h"      /* 录音页：显示识别文字 */
 
 #define LINK_LINE_MAX   96
 #define LINK_POLL_MS    30
@@ -29,6 +30,10 @@ static volatile bool s_ar_ok    = false;   /* 该 AR 是否 OK */
 static volatile bool     s_time_ready = false;
 static volatile uint16_t s_time_h = 0, s_time_m = 0, s_time_s = 0;
 static volatile uint16_t s_time_y = 0, s_time_mon = 0, s_time_day = 0;
+
+/* 语音识别结果信箱：ISR 里只存文字，界面刷新交给定时器 */
+static volatile bool s_asr_ready = false;
+static char s_asr_buf[96];
 
 /* ── 发送侧 ───────────────────────────────────────────── */
 static uint8_t    s_req_id  = 0;
@@ -67,6 +72,22 @@ void link_send_intent(ui_icon_t kind)
     }
 }
 
+void link_send_text(const char *text)
+{
+    char buf[128];
+    if (!text || text[0] == '\0') return;
+
+    s_req_id = (uint8_t)((s_req_id + 1) & 0xFF);
+    s_pending = UI_ICON_MIC;      /* 回执时在界面显示麦克风图标 */
+
+    /* T = 自由文本通道；内容由网关的关键词/LLM 映射成白名单动作 */
+    int n = snprintf(buf, sizeof(buf), "OV+AI=%u,T,%s\r\n",
+                     (unsigned)s_req_id, text);
+    if (n > 0) {
+        HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)n, 100);
+    }
+}
+
 /* ═══════════════════════ 接收 ═══════════════════════ */
 
 /**
@@ -99,6 +120,18 @@ static void link_parse_line(char *line)
             s_time_y = y; s_time_mon = mon; s_time_day = day;
             s_time_ready = true;
         }
+        return;
+    }
+
+    if (strncmp(line, "OV+EV=ASR,", 10) == 0) {
+        const char *p = line + 10;
+        size_t i = 0;
+        while (p[i] != '\0' && i < sizeof(s_asr_buf) - 1) {
+            s_asr_buf[i] = p[i];
+            i++;
+        }
+        s_asr_buf[i] = '\0';
+        s_asr_ready = true;
         return;
     }
 
@@ -151,7 +184,13 @@ static void link_poll_timer(lv_timer_t *t)
                   (uint8_t)s_time_h, (uint8_t)s_time_m, (uint8_t)s_time_s);
     }
 
-    /* ② 指令回执到达 → 更新回执横条与抽屉圆点 */
+    /* ② 识别结果到达 → 显示到录音页 */
+    if (s_asr_ready) {
+        s_asr_ready = false;
+        ui_rec_set_text(s_asr_buf);
+    }
+
+    /* ③ 指令回执到达 → 更新回执横条与抽屉圆点 */
     if (s_ar_ready) {
         s_ar_ready = false;
         ui_main_set_result(s_pending, s_ar_ok);
@@ -159,6 +198,11 @@ static void link_poll_timer(lv_timer_t *t)
 }
 
 /* ═══════════════════════ 意图回调（UI → 链路）═══════════════════════ */
+
+static void on_ui_text(const char *text)
+{
+    link_send_text(text);
+}
 
 static void on_ui_intent(ui_icon_t kind)
 {
@@ -174,6 +218,7 @@ void link_init(void)
 
     /* UI 点意图时回调到这里（UI 本身不需要知道串口的存在） */
     ui_main_set_intent_cb(on_ui_intent);
+    ui_main_set_text_cb(on_ui_text);   /* 录音页确认发送 */
 
     /* 启动中断接收 */
     HAL_UART_Receive_IT(&huart1, &s_rx_byte, 1);

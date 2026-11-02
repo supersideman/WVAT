@@ -677,6 +677,11 @@
               <FilePath>..\User\GUI\ui_icons.c</FilePath>
             </File>
             <File>
+              <FileName>ui_rec.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\GUI\ui_rec.c</FilePath>
+            </File>
+            <File>
               <FileName>ui_status.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\GUI\ui_status.c</FilePath>
@@ -1809,6 +1814,11 @@
               <FileName>lv_font_montserrat_44.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Middlewares\LVGL\src\font\lv_font_montserrat_44.c</FilePath>
+            </File>
+            <File>
+              <FileName>lv_font_simsun_16_cjk.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Middlewares\LVGL\src\font\lv_font_simsun_16_cjk.c</FilePath>
             </File>
             <File>
               <FileName>lv_font_montserrat_14.c</FileName>

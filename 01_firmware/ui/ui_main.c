@@ -10,6 +10,7 @@
 #include "ui_icons.h"
 #include "ui_drawer.h"
 #include "ui_status.h"
+#include "ui_rec.h"
 
 #define COL(c) lv_color_hex(c)
 
@@ -26,7 +27,8 @@ static bool       s_res_ok = true;
 static lv_obj_t *s_res_slot_intent;   /* 左侧图标容器 */
 static lv_obj_t *s_res_slot_status;   /* 右侧状态容器 */
 
-static ui_intent_cb_t s_intent_cb = NULL;   /* 链路层注册的回调（可为空）*/
+static ui_intent_cb_t s_intent_cb = NULL;   /* 链路层注册的意图回调（可为空）*/
+static ui_text_cb_t   s_text_cb   = NULL;   /* 录音页确认发送时用 */
 
 /* ───────────────── 工具 ───────────────── */
 
@@ -97,16 +99,8 @@ static void on_more_clicked(lv_event_t *e)
 static void on_talk_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-
-    /* 语音是"有过程"的操作：先切到全屏状态页显示录音中，
-       结果到了再由 ui_main_set_result() 转到成功/失败 */
-    ui_status_recording();
-
-    if (s_intent_cb) {
-        s_intent_cb(UI_ICON_MIC);
-    } else {
-        ui_main_set_result(UI_ICON_MIC, true);
-    }
+    /* 语音是"有过程"的操作：进入专门的录音页（波形 + 转写 + 确认）*/
+    ui_rec_open();
 }
 
 /** 一个意图格：66×66 圆角卡片 + 居中图标（可点、有按下反馈） */
@@ -209,6 +203,16 @@ void ui_main_set_intent_cb(ui_intent_cb_t cb)
 ui_intent_cb_t ui_main_get_intent_cb(void)
 {
     return s_intent_cb;
+}
+
+void ui_main_set_text_cb(ui_text_cb_t cb)
+{
+    s_text_cb = cb;
+}
+
+ui_text_cb_t ui_main_get_text_cb(void)
+{
+    return s_text_cb;
 }
 
 void ui_main_set_result(ui_icon_t intent, bool ok)

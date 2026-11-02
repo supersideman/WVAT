@@ -29,6 +29,12 @@ void link_init(void);
 /** 主动发一条意图（UI 的意图回调会调它） */
 void link_send_intent(ui_icon_t kind);
 
+/**
+ * 发一段自由文本（录音页确认后调用）
+ * 走 OV+AI=<id>,T,<文字>，由网关的慢通道理解并执行。
+ */
+void link_send_text(const char *text);
+
 /** 图标 → 协议动作码（A01/A03/A07/A08） */
 const char *link_code_of(ui_icon_t kind);
 

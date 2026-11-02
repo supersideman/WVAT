@@ -30,6 +30,14 @@ void ui_main_set_intent_cb(ui_intent_cb_t cb);
 /** 取当前注册的意图回调（抽屉页要用；未注册返回 NULL） */
 ui_intent_cb_t ui_main_get_intent_cb(void);
 
+/**
+ * 文本回调：录音页确认发送时，把"用户确认过的文字"交给链路层。
+ * 链路层用 OV+AI=<id>,T,<文字> 发出去（慢通道，由网关理解并执行）。
+ */
+typedef void (*ui_text_cb_t)(const char *text);
+void ui_main_set_text_cb(ui_text_cb_t cb);
+ui_text_cb_t ui_main_get_text_cb(void);
+
 /* 注：切页统一走 ui_stage（ui_stage_show_home / ui_stage_lock），
    所以这里不再暴露 ui_main_show()。 */
 
