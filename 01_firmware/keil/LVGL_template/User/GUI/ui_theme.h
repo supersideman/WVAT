@@ -152,7 +152,8 @@
 /* ── 语音历史页 ────────────────────────────────────────────
    入口：主界面的「结果回执」卡片可点，点进历史。
    布局：顶部条 26px + 可滚动列表；每行 44px，行内 = 时间 + 内容 + 结果点 */
-#define UI_HIST_TOP_H    26
+#define UI_HIST_TOP_H    32    /* 比录音页高一点，好放得下更大的返回键 */
+#define UI_HIST_BACK_SIZE 28   /* 可见按钮尺寸；实际点击热区 56×46（见 ui_history.c）*/
 #define UI_HIST_X        8
 #define UI_HIST_W        (UI_W - 2 * UI_HIST_X)
 #define UI_HIST_ROW_H    44

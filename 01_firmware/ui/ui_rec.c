@@ -247,7 +247,12 @@ static void build_screen(void)
 
     /* 顶部条：左上角返回 */
     mk_box(s_scr, 0, 0, UI_W, UI_REC_TOP_H, 0, UI_C_CARD, LV_OPA_COVER);
-    lv_obj_t *back = mk_box(s_scr, 2, 1, UI_REC_BACK_SIZE, UI_REC_BACK_SIZE, 8,
+    /* 返回键：外面套一个透明热区，手指不用瞄准 24px 的小图标 */
+    lv_obj_t *hit = mk_box(s_scr, 0, 0, 56, 46, 0, UI_C_CARD, LV_OPA_TRANSP);
+    lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(hit, on_back_clicked, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *back = mk_box(hit, 3, 3, UI_REC_BACK_SIZE, UI_REC_BACK_SIZE, 8,
                             UI_C_CARD, LV_OPA_COVER);
     ui_icon_draw(back, UI_ICON_BACK, UI_REC_BACK_SIZE / 2, UI_REC_BACK_SIZE / 2,
                  UI_REC_BACK_SIZE - 2, UI_C_TEXT);

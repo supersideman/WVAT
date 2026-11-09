@@ -60,7 +60,7 @@ def render(text: str, font, scale: int = 4):
     img = Image.new("L", (width, line_height + 16), 0)
     px = img.load()
     pen = 10
-    baseline = 8 + base_line
+    line_top = 8                                  # 标签内容区顶边（行框从这里开始）
 
     for ch in text:
         rcp = ord(ch) - range_start
@@ -73,6 +73,10 @@ def render(text: str, font, scale: int = 4):
             continue
         bidx, adv_w, bw, bh, ox, oy = dsc[gid]
 
+        # ⚠️ 必须照 LVGL 的真实公式算，否则验证图和板上效果不一致：
+        #   gpos.y = 行顶 + (line_height - base_line) - box_h - ofs_y
+        gpos_y = line_top + (line_height - base_line) - bh - oy
+
         # 按 LVGL 规则逐位取：连续比特流，bit_ofs = y*bw + x
         for y in range(bh):
             for x in range(bw):
@@ -80,7 +84,7 @@ def render(text: str, font, scale: int = 4):
                 byte = bitmap[bidx + (bit >> 3)]
                 if byte & (1 << (7 - (bit & 7))):
                     gx = pen + ox + x
-                    gy = baseline + oy + y
+                    gy = gpos_y + y
                     if 0 <= gx < width and 0 <= gy < img.height:
                         px[gx, gy] = 255
         pen += adv_w // 16

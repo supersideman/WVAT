@@ -181,7 +181,7 @@ void ui_main_build(lv_obj_t *parent)
                             UI_C_CARD, LV_OPA_TRANSP);
     /* 回执文字：塞在两个图标中间的空位里（宽 152px ≈ 10 个汉字）*/
     s_lbl_reply = lv_label_create(res);
-    lv_obj_set_pos(s_lbl_reply, 32, 4);
+    lv_obj_set_pos(s_lbl_reply, 32, 7);   /* 字库墨迹在行框 0..14，y=7 时视觉居中 */
     lv_obj_set_size(s_lbl_reply, UI_RESULT_W - 64, RESULT_ICON_SZ);
     lv_obj_set_style_text_font(s_lbl_reply, &lv_font_cn_14, 0);
     lv_obj_set_style_text_color(s_lbl_reply, COL(UI_C_DIM), 0);

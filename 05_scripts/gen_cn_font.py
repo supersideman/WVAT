@@ -104,7 +104,13 @@ def generate(font_path: str, size: int, charset: list[str], name: str, out_path:
         bitmap += blob
 
         adv_w = int(round(font.getlength(ch) * 16))
-        glyphs.append((idx, adv_w, w, h, x0, y0 - ascent))
+        # ⚠️ ofs_y 的语义（踩过：整屏中文被画低了约 13px，矮容器里露出下沿）
+        #   LVGL 的绘制公式：
+        #       gpos.y = 行顶 + (line_height - base_line) - box_h - ofs_y
+        #   反解得 ofs_y = 基线 - 字形底边，即**字形底边相对基线**的偏移
+        #   （PIL 坐标里基线位于 y = ascent）。
+        #   之前误用字形**顶边**（y0 - ascent），等于每个字又往下多画了 box_h。
+        glyphs.append((idx, adv_w, w, h, x0, y1 - ascent))
         unicodes.append(ord(ch))
 
     # ── 生成 C 文件 ──────────────────────────────

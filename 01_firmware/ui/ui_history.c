@@ -168,13 +168,22 @@ static void build_screen(void)
     /* 顶部条 */
     hbox(s_scr, 0, 0, UI_W, UI_HIST_TOP_H, 0, UI_C_CARD, LV_OPA_COVER);
 
-    lv_obj_t *back = hbox(s_scr, 2, 1, 24, 24, 8, UI_C_CARD, LV_OPA_COVER);
-    ui_icon_draw(back, UI_ICON_BACK, 12, 12, 22, UI_C_TEXT);
-    lv_obj_add_flag(back, LV_OBJ_FLAG_CLICKABLE);
+    /* 返回键：**看得见的按钮小，能点的区域大**。
+       24px 的按钮手指几乎点不准（踩过），所以外面套一个透明的 56×46 热区，
+       两个对象都回调同一个函数。 */
+    lv_obj_t *hit = hbox(s_scr, 0, 0, 56, 46, 0, UI_C_CARD, LV_OPA_TRANSP);
+    lv_obj_add_flag(hit, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(hit, on_back_clicked, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *back = hbox(hit, 3, 3, UI_HIST_BACK_SIZE, UI_HIST_BACK_SIZE, 10,
+                          UI_C_CARD, LV_OPA_COVER);
+    ui_icon_draw(back, UI_ICON_BACK, UI_HIST_BACK_SIZE / 2, UI_HIST_BACK_SIZE / 2,
+                 UI_HIST_BACK_SIZE - 4, UI_C_TEXT);
+    lv_obj_add_flag(back, LV_OBJ_FLAG_CLICKABLE);          /* 按在图标上也有反馈 */
     lv_obj_set_style_bg_color(back, COL(UI_C_PRESSED), LV_STATE_PRESSED);
     lv_obj_add_event_cb(back, on_back_clicked, LV_EVENT_CLICKED, NULL);
 
-    lv_obj_t *title = hline(s_scr, 0, 4, UI_W, 20, UI_C_TEXT);
+    lv_obj_t *title = hline(s_scr, 0, (UI_HIST_TOP_H - 19) / 2 + 2, UI_W, 20, UI_C_TEXT);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(title, LV_LABEL_LONG_CLIP);
     lv_label_set_text(title, "历史");
