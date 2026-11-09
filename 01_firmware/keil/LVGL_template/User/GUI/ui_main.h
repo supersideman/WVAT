@@ -58,6 +58,13 @@ ui_mic_cb_t ui_main_get_mic_cb(void);
 void ui_main_set_result(ui_icon_t intent, bool ok);
 
 /**
+ * 显示网关回来的"回执文字"（例如「音量 77%」「已切到下一首」）。
+ * 显示在回执横条中间的空位里——那里本来就是空的，不占新空间。
+ * 传 NULL 或空串表示清除。
+ */
+void ui_main_set_reply(const char *text);
+
+/**
  * 更新时钟与日期
  * @param time_str "10:24"（数字+冒号，内置字体即可）
  * @param date_str "10/20"（纯数字，避免中文字库）

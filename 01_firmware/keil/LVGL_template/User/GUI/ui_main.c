@@ -15,9 +15,12 @@
 
 #define COL(c) lv_color_hex(c)
 
+LV_FONT_DECLARE(lv_font_cn_14);   /* 回执文字用中文字库 */
+
 static lv_obj_t *s_scr;
 static lv_obj_t *s_lbl_time;
 static lv_obj_t *s_lbl_date;
+static lv_obj_t *s_lbl_reply;      /* 回执横条中间的文字 */
 
 /* 结果回执：左侧意图图标 + 右侧状态图标 */
 #define RESULT_ICON_SZ 20
@@ -176,6 +179,16 @@ void ui_main_build(lv_obj_t *parent)
                             (UI_RESULT_H - RESULT_ICON_SZ) / 2,
                             RESULT_ICON_SZ, RESULT_ICON_SZ, 0,
                             UI_C_CARD, LV_OPA_TRANSP);
+    /* 回执文字：塞在两个图标中间的空位里（宽 152px ≈ 10 个汉字）*/
+    s_lbl_reply = lv_label_create(res);
+    lv_obj_set_pos(s_lbl_reply, 32, 4);
+    lv_obj_set_size(s_lbl_reply, UI_RESULT_W - 64, RESULT_ICON_SZ);
+    lv_obj_set_style_text_font(s_lbl_reply, &lv_font_cn_14, 0);
+    lv_obj_set_style_text_color(s_lbl_reply, COL(UI_C_DIM), 0);
+    lv_obj_set_style_text_align(s_lbl_reply, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(s_lbl_reply, LV_LABEL_LONG_DOT);   /* 太长省略，不换行 */
+    lv_label_set_text(s_lbl_reply, "");
+
     result_repaint();
 
     /* 回执条 = 语音历史入口（不新增按钮，复用已有元素：
@@ -253,6 +266,12 @@ void ui_main_set_result(ui_icon_t intent, bool ok)
     if (ui_status_visible()) {
         ui_status_show_result(intent, ok, UI_ST_HOLD_MS);
     }
+}
+
+void ui_main_set_reply(const char *text)
+{
+    if (!s_lbl_reply) return;
+    lv_label_set_text(s_lbl_reply, (text && text[0]) ? text : "");
 }
 
 void ui_main_set_time(const char *time_str, const char *date_str)

@@ -32,6 +32,10 @@ static volatile bool     s_time_ready = false;
 static volatile uint16_t s_time_h = 0, s_time_m = 0, s_time_s = 0;
 static volatile uint16_t s_time_y = 0, s_time_mon = 0, s_time_day = 0;
 
+/* 回执文字信箱：网关回来的 "音量 77%""已切到下一首" 这类短语 */
+static volatile bool s_reply_ready = false;
+static char s_reply_buf[64];
+
 /* 语音识别结果信箱：ISR 里只存文字，界面刷新交给定时器 */
 static volatile bool s_asr_ready = false;
 static char s_asr_buf[96];
@@ -122,6 +126,25 @@ static void link_parse_line(char *line)
         /* 中断上下文只置标志，UI 更新交给定时器 */
         s_ar_ok    = (strcmp(status, "OK") == 0);
         s_ar_ready = true;
+
+        /* 第三个字段是回执文字（可能没有）。格式：OV+AR=<id>,<STATUS>,<TEXT>
+           不用 sscanf("%[^,]") 取——文字里可能含逗号，
+           定位到第二个逗号之后整段收下更稳。 */
+        {
+            const char *p = strchr(line + 6, ',');
+            if (p) p = strchr(p + 1, ',');
+            if (p) {
+                p++;
+                size_t n = 0;
+                while (p[n] != '\0' && p[n] != '\r' && p[n] != '\n'
+                       && n < sizeof(s_reply_buf) - 1) {
+                    n++;
+                }
+                memcpy(s_reply_buf, p, n);
+                s_reply_buf[n] = '\0';
+                s_reply_ready  = true;
+            }
+        }
         return;
     }
 
@@ -204,6 +227,12 @@ static void link_poll_timer(lv_timer_t *t)
         s_asr_ready = false;
         ui_rec_set_text(s_asr_buf);
         ui_history_add(s_asr_buf);   /* 同时记入语音历史 */
+    }
+
+    /* ②b 回执文字到达 → 显示在回执横条中间 */
+    if (s_reply_ready) {
+        s_reply_ready = false;
+        ui_main_set_reply(s_reply_buf);
     }
 
     /* ③ 指令回执到达 → 更新回执横条与抽屉圆点 */

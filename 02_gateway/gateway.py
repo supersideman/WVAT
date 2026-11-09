@@ -171,7 +171,16 @@ class Gateway:
         if code in WHITELIST:
             self.counters["fast"] += 1
             if code == "A07":
-                return f"{time.strftime('%H:%M:%S')} 在线", P.STATUS_OK
+                # 查状态回**真实数据**：时间 + 音量 + 是否静音（CoreAudio 可回读）。
+                # 以前只回"在线"，等于什么信息都没有——界面上看不出区别。
+                try:
+                    pct = round(audio_win.get_volume() * 100)
+                    muted = audio_win.get_mute()
+                    tail = " 静音" if muted else ""
+                    return f"{time.strftime('%H:%M')} 音量{pct}%{tail}", P.STATUS_OK
+                except Exception as exc:              # noqa: BLE001
+                    print(f"  [!] 读音量失败：{exc}", flush=True)
+                    return f"{time.strftime('%H:%M')} 在线", P.STATUS_OK
             ok, text = self.ex.execute(code, arg)
             return (text, P.STATUS_OK) if ok else (f"执行失败：{text}", P.STATUS_ERR)
 
