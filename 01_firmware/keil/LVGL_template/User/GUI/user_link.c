@@ -12,7 +12,8 @@
 #include "usart.h"      /* huart1 */
 #include "ui_main.h"
 #include "user_clock.h"
-#include "ui_rec.h"      /* 录音页：显示识别文字 */
+#include "ui_rec.h"
+#include "ui_history.h"      /* 录音页：显示识别文字 */
 
 #define LINK_LINE_MAX   96
 #define LINK_POLL_MS    30
@@ -202,12 +203,14 @@ static void link_poll_timer(lv_timer_t *t)
     if (s_asr_ready) {
         s_asr_ready = false;
         ui_rec_set_text(s_asr_buf);
+        ui_history_add(s_asr_buf);   /* 同时记入语音历史 */
     }
 
     /* ③ 指令回执到达 → 更新回执横条与抽屉圆点 */
     if (s_ar_ready) {
         s_ar_ready = false;
         ui_main_set_result(s_pending, s_ar_ok);
+        ui_history_mark_last(s_ar_ok);   /* 历史里那条的结果 */
     }
 }
 

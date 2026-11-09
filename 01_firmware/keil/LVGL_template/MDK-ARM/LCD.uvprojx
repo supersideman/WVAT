@@ -672,6 +672,11 @@
               <FilePath>..\User\GUI\ui_icons.c</FilePath>
             </File>
             <File>
+              <FileName>ui_history.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\GUI\ui_history.c</FilePath>
+            </File>
+            <File>
               <FileName>lv_font_cn_14.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\GUI\lv_font_cn_14.c</FilePath>

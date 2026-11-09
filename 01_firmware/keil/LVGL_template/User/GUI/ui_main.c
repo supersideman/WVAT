@@ -11,6 +11,7 @@
 #include "ui_drawer.h"
 #include "ui_status.h"
 #include "ui_rec.h"
+#include "ui_history.h"
 
 #define COL(c) lv_color_hex(c)
 
@@ -97,6 +98,12 @@ static void on_more_clicked(lv_event_t *e)
 }
 
 /** 麦克风大按钮被点击 */
+static void on_receipt_clicked(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    ui_history_open();     /* 回执条 → 语音历史 */
+}
+
 static void on_talk_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -170,6 +177,12 @@ void ui_main_build(lv_obj_t *parent)
                             RESULT_ICON_SZ, RESULT_ICON_SZ, 0,
                             UI_C_CARD, LV_OPA_TRANSP);
     result_repaint();
+
+    /* 回执条 = 语音历史入口（不新增按钮，复用已有元素：
+       用户看到"刚才那条结果"时，自然想点开看更多）*/
+    lv_obj_add_flag(res, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(res, COL(UI_C_PRESSED), LV_STATE_PRESSED);
+    lv_obj_add_event_cb(res, on_receipt_clicked, LV_EVENT_CLICKED, NULL);
 
     /* 3 个意图格：只放最常用的两个 + 「更多」
        （拓展指令都在抽屉里，避免和抽屉重复）*/

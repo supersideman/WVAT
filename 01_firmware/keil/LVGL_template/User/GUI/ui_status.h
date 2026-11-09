@@ -12,8 +12,13 @@
  *   ui_status_show_result()→ 显示成功/失败，1.2 秒后自动返回上一页
  *   ui_status_hide()       → 手动返回
  */
-#ifndef UI_STATUS_H
-#define UI_STATUS_H
+/* ⚠️ 这里的 guard 原名是 UI_STATUS_H，与 ui_theme.h 里的布局常量
+   `#define UI_STATUS_H 44`（顶部状态区高度）重名。
+   谁先 include 谁生效：ui_main.c 先包含 ui_theme.h，于是本文件整个被跳过，
+   ui_status_* 全部变成"隐式声明"——ARMCC 只警告不报错，潜伏了很久。
+   所以 guard 改成 UI_STATUS_PAGE_H。 */
+#ifndef UI_STATUS_PAGE_H
+#define UI_STATUS_PAGE_H
 
 #include <stdbool.h>
 
@@ -40,4 +45,4 @@ bool ui_status_visible(void);
 }
 #endif
 
-#endif /* UI_STATUS_H */
+#endif /* UI_STATUS_PAGE_H */

@@ -19,7 +19,7 @@ $uv = Join-Path $proj "MDK-ARM\LCD.uvprojx"
 $p = Get-Content $uv -Raw
 
 # 需要参与编译的 .c（新增文件必须列进来，否则 Keil 根本不会编它）
-$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c", "user_clock.c", "ui_status.c", "ui_rec.c", "lv_font_cn_14.c")
+$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c", "user_clock.c", "ui_status.c", "ui_rec.c", "ui_history.c", "lv_font_cn_14.c")
 
 $missing = @()
 foreach ($c in $needC) { if ($p -notmatch [regex]::Escape($c)) { $missing += $c } }
