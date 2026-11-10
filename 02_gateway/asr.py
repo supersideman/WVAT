@@ -223,6 +223,10 @@ class LiveRecorder:
         """转写一段 PCM（转发到模块级函数，方便调用方只持有一个对象）。"""
         return transcribe(pcm)
 
+    def transcribe_smart(self, pcm: bytes, phrases=None) -> tuple[str, str]:
+        """先语法约束、失败再自由识别，返回 (文本, 走的哪条路)。"""
+        return transcribe_smart(pcm, phrases)
+
 
 def transcribe(pcm: bytes) -> str:
     """把 PCM 喂给 Vosk，返回识别出的中文文本（可能为空串）。"""
@@ -244,6 +248,77 @@ def transcribe(pcm: bytes) -> str:
 def record_and_transcribe(seconds: float = 4.0, dev: int | None = None):
     """录一段并识别，返回 (文本, peak, rms)。给"不带 start/stop 的老调用"兜底用。"""
     return listen(seconds, dev)
+
+
+# ── 语法约束识别（命令词表）────────────────────────────────
+# 为什么需要：
+#   小模型对口音敏感，常把「资料」听成「质量」，只能靠模糊匹配补救。
+#   把候选短语喂给 Vosk 做语法约束，输出被限制在词表内，错误率大幅下降。
+#
+# ⚠️ 中文模型必须**把短语按字用空格分开**（vocabulary 是单字粒度）：
+#   整词不分字会整句变成 [unk]（实测过）。
+
+_grammar_rec = None
+_grammar_sig = ""
+
+
+def build_grammar(phrases: list[str]) -> str:
+    """把短语列表转成 Vosk 的 grammar JSON（每字空格分开 + [unk]）。"""
+    items = [" ".join(p) if p != "[unk]" else p for p in phrases]
+    if "[unk]" not in items:
+        items.append("[unk]")
+    return json.dumps(items, ensure_ascii=False)
+
+
+def _grammar_recognizer(phrases: list[str]):
+    """按短语集合缓存一个语法识别器（重建有开销，别每次都建）。"""
+    global _grammar_rec, _grammar_sig
+
+    import vosk
+
+    sig = "|".join(phrases)
+    if _grammar_rec is not None and sig == _grammar_sig:
+        return _grammar_rec
+
+    _ensure_model()                       # 确保 _model 已加载
+    vosk.SetLogLevel(-1)
+    _grammar_rec = vosk.KaldiRecognizer(_model, RATE, build_grammar(phrases))
+    _grammar_sig = sig
+    return _grammar_rec
+
+
+def transcribe_phrases(pcm: bytes, phrases: list[str]) -> str:
+    """在给定短语集合内识别。返回空串表示"没匹配到词表里的任何短语"。"""
+    if not phrases:
+        return ""
+
+    rec = _grammar_recognizer(phrases)
+    rec.Reset()
+
+    chunk = RATE * 2 * 0.2
+    for i in range(0, len(pcm), int(chunk)):
+        rec.AcceptWaveform(pcm[i:i + int(chunk)])
+
+    text = (json.loads(rec.FinalResult()).get("text") or "").replace(" ", "")
+    text = text.strip("。，、！？；：,.!?;: ")
+    if text in ("[unk]", "unk"):
+        return ""
+    return text
+
+
+def transcribe_smart(pcm: bytes, phrases: list[str] | None = None) -> tuple[str, str]:
+    """先语法约束识别，识别不出再退回自由识别。返回 (文本, 用的是哪条路)。
+
+    两段式的价值：
+      命中词表 → 结果干净（不会出现「质量」这类近音错字）；
+      不在词表 → 仍能得到自由文本（"帮我打开一下资料"这类长句），
+                  交给网关的模糊匹配去理解。
+    """
+    if phrases:
+        text = transcribe_phrases(pcm, phrases)
+        if text:
+            return text, "grammar"
+    return transcribe(pcm), "free"
 
 
 def listen(seconds: float = 4.0, dev: int | None = None) -> tuple[str, int, float]:

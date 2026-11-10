@@ -81,6 +81,7 @@ class Gateway:
         self.use_llm = use_llm
         self.asr = asr              # 语音识别器（LiveRecorder 实例；None = 不可用）
         self.asr_error = ""         # 不可用时的原因（启动自检会填）
+        self._phrases  = None       # 语法约束用的短语表（惰性生成）
         self.dedup: "queue.OrderedDict[int, str]" = __import__("collections").OrderedDict()
         self.last_req_id = 0        # 用于识别设备复位（REQ_ID 回退）
         self.missed_pong = 0
@@ -241,7 +242,7 @@ class Gateway:
                 return "录音太短", P.STATUS_ERR
 
             try:
-                text = self.asr.transcribe(pcm)
+                text, how = self.asr.transcribe_smart(pcm, self._asr_phrases())
             except Exception as exc:                  # noqa: BLE001
                 print(f"  [!] 识别失败：{type(exc).__name__}: {exc}", flush=True)
                 return "识别失败", P.STATUS_ERR
@@ -251,12 +252,47 @@ class Gateway:
                 return "没听清", P.STATUS_ERR
 
             self.ch.send_line(P.ev_frame("ASR", text))
-            print(f"  [识别] → {text}", flush=True)
+            tag = "词表内" if how == "grammar" else "自由"
+            print(f"  [识别/{tag}] → {text}", flush=True)
             return "识别完成", P.STATUS_OK
 
         # 没带 arg：说明终端发的还是老式 A08 → 固件是旧版
         print("  [!] 收到不带 start/stop 的 A08：固件可能是旧版（请重新编译烧录）", flush=True)
         return "固件需更新（A08 缺 start/stop）", P.STATUS_ERR
+
+    def _asr_phrases(self) -> list[str]:
+        """给语法约束识别用的候选短语（来自白名单，单一数据源）。
+
+        为什么从 FALLBACK_KEYWORDS 生成而不是另写一份：
+            两处各写一份必然漂移——加了新动作却忘了同步词表，
+            后果是"说了也不认"。这里直接复用同一份关键词。
+        """
+        if self._phrases is not None:
+            return self._phrases
+
+        out: list[str] = []
+        for words, code in FALLBACK_KEYWORDS:
+            out.extend(words)
+            act = WHITELIST.get(code)
+            if act is not None:
+                out.append(act.name)
+
+        # 常见自然说法（带宾语/语气，比单词更像人话）
+        out.extend([
+            "帮我打开资料", "打开资料", "帮我查一下状态", "现在几点了",
+            "把音量调高一点", "把音量调低一点", "帮我放首歌", "切到下一首",
+        ])
+
+        # 去重且保序；只保留纯中文短语
+        # （动作名里有「音量+」「音量-」这类符号，Vosk 中文词表里没有，
+        #   留着只会刷 "Ignoring word missing in vocabulary" 警告）
+        seen: set[str] = set()
+        self._phrases = [
+            p for p in out
+            if p and p not in seen and not seen.add(p)
+            and all("\u4e00" <= ch <= "\u9fff" for ch in p)
+        ]
+        return self._phrases
 
     def slow_channel(self, text: str) -> str:
         if self.use_llm:
