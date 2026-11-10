@@ -1,7 +1,0 @@
-docs(hardware): 用官方 pin map 判定占用/空闲；用嘉立创 EDA 确认扩展板不占 PB12/13/15
-
-- 官方 pin map 读法：挂彩色功能框=占用，只有蓝色脚名=空闲
-- 占用 14 个脚（LCD 6 + 触摸 3 + 串口 2 + USB 2 + 按键/LED 2），PA8/PC9 为预留未占用
-- 空闲 25 个，PB12/PB13/PB15 明确无标签 → I2S2 可行
-- 用户在嘉立创 EDA 查看 PCB_exCam：PB12/PB13/PB15 焊盘无走线 → 焊线不冲突
-- 存官方 pin map 到 04_docs/hardware/
