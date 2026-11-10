@@ -300,6 +300,10 @@ def transcribe_phrases(pcm: bytes, phrases: list[str]) -> str:
         rec.AcceptWaveform(pcm[i:i + int(chunk)])
 
     text = (json.loads(rec.FinalResult()).get("text") or "").replace(" ", "")
+    # ⚠️ 结果里可能混着 [unk] 标记（如「[unk]帮我打开资料」）：
+    #    说明前半段没被词表匹配上。必须把这些标记去掉，
+    #    否则会被当成正常文本下发，界面显示成奇怪的字符串（实测踩到）。
+    text = text.replace("[unk]", "").replace("unk", "")
     text = text.strip("。，、！？；：,.!?;: ")
     if text in ("[unk]", "unk"):
         return ""
