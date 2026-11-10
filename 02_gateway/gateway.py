@@ -283,13 +283,21 @@ class Gateway:
             "把音量调高一点", "把音量调低一点", "帮我放首歌", "切到下一首",
         ])
 
-        # 去重且保序；只保留纯中文短语
-        # （动作名里有「音量+」「音量-」这类符号，Vosk 中文词表里没有，
-        #   留着只会刷 "Ignoring word missing in vocabulary" 警告）
+        # 去重且保序；只保留纯中文、且**至少 2 个字**的短语
+        #
+        # 为什么过滤单字（歌/困/睡）：
+        #   语法约束解码会把语音片段切给任意允许的短语，单字短语太"容易命中"，
+        #   于是长句容易被切碎成一串单字（说"我要睡了"→ 输出"睡"）。
+        #   两字以上才有足够音素区分度。单字的需求由"自由识别 + 模糊匹配"兜底。
+        #
+        # 为什么过滤含符号的短语（音量+/音量-）：
+        #   Vosk 中文词表里没有 +/- 这类符号，留着只会刷
+        #   "Ignoring word missing in vocabulary" 的警告。
         seen: set[str] = set()
         self._phrases = [
             p for p in out
             if p and p not in seen and not seen.add(p)
+            and len(p) >= 2
             and all("\u4e00" <= ch <= "\u9fff" for ch in p)
         ]
         return self._phrases
