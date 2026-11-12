@@ -1,13 +1,11 @@
-feat(mic): I2S2 数字麦克风采集（寄存器级）+ 开机自检
+feat(mic): I2S2 支持两套引脚组合，开机自动探测哪套通
 
-硬件：INMP441 → PB13(SCK)/PB12(WS)/PB15(SD)/3V3/GND，L-R 接地选左声道
-时钟：PLLI2S N=58 R=2 → I2S 60.417MHz；I2SDIV=29+ODD=1 → 1.024MHz → 16000.2Hz
+发现 F411 的 I2S2 除主用引脚外还有备用组合（HAL 里 AF5_SPI2 与 AF6_SPI2 并存）：
+  主用 AF5：WS=PB12 CK=PB13 SD=PB15（核心板右排最上面两行）
+  备用 AF6：WS=PB9  CK=PB10 SD=PC3 （CK/SD 恰好在扩展板 2×9 上）
 
-为什么不用 HAL 的 I2S：
-1) 模板工程里没有 stm32f4xx_hal_i2s.c（和当初 RTC 一样缺文件）
-2) HAL 的轮询接收是 (*p) = (uint16_t)Instance->DR; —— 24bit 数据在 32bit 时隙里
-   高位对齐，取低 16 位只剩最低 8 位，数据全废。故改为直接读 32 位 DR。
+实测触摸屏用的是 PB6/PB7（软件 I2C），所以 PB9 空闲，
+官方 pin map 上 PB8/PB9 重复标注的 TP SDA 是图面错误。
 
-自检：开机采 1 秒，串口打印 [mic] lvl 电平条 + 左右声道 peak/rms，
-并给出诊断结论（无信号/右声道有声=LR 接错/全 0=供电或 SD 问题）。
-新增 05_scripts/serial_monitor.py 便于单独观察 [mic] 输出。
+固件开机依次探测两套配置（读 256 字 + 检查数据是否有变化），
+谁有数据用谁，并把实际生效的组合打印出来。这样不用反复烧板试 AF 号。
