@@ -44,24 +44,42 @@
 #define MIC_CHUNK_WORDS 512u
 #define MIC_CHUNKS      63u
 
-/** 一套 I2S2 引脚配置 */
+/**
+ * 一套 I2S2 引脚配置。
+ * AF 是**按引脚**独立的：主用引脚是 AF5、备用引脚是 AF6，
+ * 所以允许 WS 用主用脚、CK/SD 用备用脚这种混合接法。
+ */
 typedef struct {
-    GPIO_TypeDef *ws_port; uint16_t ws_pin;
-    GPIO_TypeDef *ck_port; uint16_t ck_pin;
-    GPIO_TypeDef *sd_port; uint16_t sd_pin;
-    uint8_t       af;
+    GPIO_TypeDef *ws_port; uint16_t ws_pin; uint8_t ws_af;
+    GPIO_TypeDef *ck_port; uint16_t ck_pin; uint8_t ck_af;
+    GPIO_TypeDef *sd_port; uint16_t sd_pin; uint8_t sd_af;
     const char   *name;
 } mic_pinset_t;
 
-static const mic_pinset_t SET_PRIMARY = {
-    GPIOB, GPIO_PIN_12, GPIOB, GPIO_PIN_13, GPIOB, GPIO_PIN_15,
-    GPIO_AF5_SPI2, "PB12/PB13/PB15 (AF5 主用)"
+/* 候选组合，开机依次探测，谁有数据用谁（顺序 = 优先级） */
+static const mic_pinset_t SET_LIST[] = {
+    /* ① 全主用（三根都飞线到 PB12/13/15 时命中）*/
+    { GPIOB, GPIO_PIN_12, GPIO_AF5_SPI2,
+      GPIOB, GPIO_PIN_13, GPIO_AF5_SPI2,
+      GPIOB, GPIO_PIN_15, GPIO_AF5_SPI2, "PB12/PB13/PB15 全 AF5" },
+
+    /* ② 混合：WS 飞 PB12，CK/SD 走扩展板 2×9 的 PB10/PC3（最省焊的方案）*/
+    { GPIOB, GPIO_PIN_12, GPIO_AF5_SPI2,
+      GPIOB, GPIO_PIN_10, GPIO_AF6_SPI2,
+      GPIOC, GPIO_PIN_3,  GPIO_AF6_SPI2, "PB12 + PB10 + PC3 混合" },
+
+    /* ③ 混合的另一种 AF 猜测：PB12 若按 AF6 才通，这里兜住 */
+    { GPIOB, GPIO_PIN_12, GPIO_AF6_SPI2,
+      GPIOB, GPIO_PIN_10, GPIO_AF6_SPI2,
+      GPIOC, GPIO_PIN_3,  GPIO_AF6_SPI2, "PB12(AF6) + PB10 + PC3 混合" },
+
+    /* ④ 全备用：WS 飞 PB9，CK/SD 走 2×9 */
+    { GPIOB, GPIO_PIN_9,  GPIO_AF6_SPI2,
+      GPIOB, GPIO_PIN_10, GPIO_AF6_SPI2,
+      GPIOC, GPIO_PIN_3,  GPIO_AF6_SPI2, "PB9 + PB10 + PC3 全 AF6" },
 };
 
-static const mic_pinset_t SET_ALT = {
-    GPIOB, GPIO_PIN_9, GPIOB, GPIO_PIN_10, GPIOC, GPIO_PIN_3,
-    GPIO_AF6_SPI2, "PB9/PB10/PC3 (AF6 备用)"
-};
+#define MIC_SET_COUNT (sizeof(SET_LIST) / sizeof(SET_LIST[0]))
 
 static bool     s_ready = false;
 static uint32_t s_last_peak = 0;
@@ -119,14 +137,13 @@ static void mic_gpio_apply(const mic_pinset_t *p)
     SPI2->I2SCFGR = 0;
 
     GPIO_InitTypeDef g = {0};
-    g.Mode      = GPIO_MODE_AF_PP;
-    g.Pull      = GPIO_NOPULL;
-    g.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
-    g.Alternate = p->af;
+    g.Mode  = GPIO_MODE_AF_PP;
+    g.Pull  = GPIO_NOPULL;
+    g.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
 
-    g.Pin = p->ws_pin; HAL_GPIO_Init(p->ws_port, &g);
-    g.Pin = p->ck_pin; HAL_GPIO_Init(p->ck_port, &g);
-    g.Pin = p->sd_pin; HAL_GPIO_Init(p->sd_port, &g);
+    g.Pin = p->ws_pin; g.Alternate = p->ws_af; HAL_GPIO_Init(p->ws_port, &g);
+    g.Pin = p->ck_pin; g.Alternate = p->ck_af; HAL_GPIO_Init(p->ck_port, &g);
+    g.Pin = p->sd_pin; g.Alternate = p->sd_af; HAL_GPIO_Init(p->sd_port, &g);
 }
 
 /** 配置 SPI2 的 I2S 模式（主机接收 / Philips / 24bit 数据 / 32bit 时隙） */
@@ -189,12 +206,15 @@ bool mic_init(void)
         return false;
     }
 
-    if (mic_probe(&SET_PRIMARY)) {
-        s_active = &SET_PRIMARY;
-    } else if (mic_probe(&SET_ALT)) {
-        s_active = &SET_ALT;
-    } else {
-        mic_print("[mic] 两套引脚都没数据：查 3V3/GND 供电、SD 接线、L/R 是否接地\r\n");
+    /* 依次试所有候选组合，第一个能收到数据的即为生效配置 */
+    for (uint32_t i = 0; i < MIC_SET_COUNT; i++) {
+        if (mic_probe(&SET_LIST[i])) {
+            s_active = &SET_LIST[i];
+            break;
+        }
+    }
+    if (!s_active) {
+        mic_print("[mic] 所有引脚组合都没数据：查 3V3/GND 供电、SD 接线、L/R 是否接地\r\n");
         return false;
     }
 
