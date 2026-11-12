@@ -4,6 +4,7 @@
 #include "user_link.h"
 #include "ui_stage.h"
 #include "user_clock.h"
+#include "user_i2s.h"
 #include "ui_lock.h"
 
 ///////////////////// VARIABLES ////////////////////
@@ -32,6 +33,7 @@ void ui_init(void)
     link_init();   /* 启动 USART1 指令链路 */
     clock_init();            /* 开 LSE，初始化内部 RTC */
     clock_start_ui_timer();  /* 每 1 秒刷新锁屏与主界面 */
+    mic_boot_selftest();     /* I2S 麦克风自检：串口打印 [mic] */
 }
 
 void ui_destroy(void)

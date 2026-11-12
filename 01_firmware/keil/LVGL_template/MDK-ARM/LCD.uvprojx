@@ -672,6 +672,11 @@
               <FilePath>..\User\GUI\ui_icons.c</FilePath>
             </File>
             <File>
+              <FileName>user_i2s.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\GUI\user_i2s.c</FilePath>
+            </File>
+            <File>
               <FileName>ui_history.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\GUI\ui_history.c</FilePath>

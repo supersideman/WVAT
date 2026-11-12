@@ -19,7 +19,7 @@ $uv = Join-Path $proj "MDK-ARM\LCD.uvprojx"
 $p = Get-Content $uv -Raw
 
 # 需要参与编译的 .c（新增文件必须列进来，否则 Keil 根本不会编它）
-$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c", "user_clock.c", "ui_status.c", "ui_rec.c", "ui_history.c", "lv_font_cn_14.c")
+$needC = @("ui_main.c", "ui_icons.c", "user_link.c", "ui_drawer.c", "ui_lock.c", "ui_stage.c", "user_clock.c", "ui_status.c", "ui_rec.c", "ui_history.c", "user_i2s.c", "lv_font_cn_14.c")
 
 $missing = @()
 foreach ($c in $needC) { if ($p -notmatch [regex]::Escape($c)) { $missing += $c } }
@@ -104,7 +104,15 @@ if ($u -notmatch 'link_init\s*\(\s*\)') {
 
 # 真实时钟：初始化 RTC + 建 1 秒刷新定时器（必须在界面建好之后）
 if ($u -notmatch 'clock_init\s*\(\s*\)') {
-    $u = $u -replace '(link_init\(\);[^\r\n]*)', "`$1`r`n    clock_init();            /* 开 LSE，初始化内部 RTC */`r`n    clock_start_ui_timer();  /* 每 1 秒刷新锁屏与主界面 */"
+    $u = $u -replace '(link_init\(\);[^\r\n]*)', "`$1`r`n    clock_init();            /* 开 LSE，初始化内部 RTC */`r`n    clock_start_ui_timer();  /* 每 1 秒刷新锁屏与主界面 */
+    mic_boot_selftest();     /* I2S 麦克风自检：[mic] 开头的串口输出 */"
+}
+# I2S 麦克风自检：独立且幂等的补丁（ui.c 早就有了 clock_init，不能靠上面的分支）
+if ($u -notmatch 'user_i2s\.h') {
+    $u = $u -replace '#include\s+"user_clock\.h"', "#include `"user_clock.h`"`r`n#include `"user_i2s.h`""
+}
+if ($u -notmatch 'mic_boot_selftest') {
+    $u = $u -replace '(clock_start_ui_timer\(\);[^\r\n]*)', "`$1`r`n    mic_boot_selftest();     /* I2S 麦克风自检：串口打印 [mic] */"
 }
 Set-Content -Path $uic -Value $u -NoNewline
 Write-Output "[3] ui.c: 舞台 + link_init() + RTC 时钟"

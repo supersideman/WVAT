@@ -1,1 +1,13 @@
-docs: 新增毕设题目与描述（含短版摘要、关键词、技术指标、答辩预案）
+feat(mic): I2S2 数字麦克风采集（寄存器级）+ 开机自检
+
+硬件：INMP441 → PB13(SCK)/PB12(WS)/PB15(SD)/3V3/GND，L-R 接地选左声道
+时钟：PLLI2S N=58 R=2 → I2S 60.417MHz；I2SDIV=29+ODD=1 → 1.024MHz → 16000.2Hz
+
+为什么不用 HAL 的 I2S：
+1) 模板工程里没有 stm32f4xx_hal_i2s.c（和当初 RTC 一样缺文件）
+2) HAL 的轮询接收是 (*p) = (uint16_t)Instance->DR; —— 24bit 数据在 32bit 时隙里
+   高位对齐，取低 16 位只剩最低 8 位，数据全废。故改为直接读 32 位 DR。
+
+自检：开机采 1 秒，串口打印 [mic] lvl 电平条 + 左右声道 peak/rms，
+并给出诊断结论（无信号/右声道有声=LR 接错/全 0=供电或 SD 问题）。
+新增 05_scripts/serial_monitor.py 便于单独观察 [mic] 输出。
