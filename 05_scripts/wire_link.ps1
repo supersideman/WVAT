@@ -2,8 +2,11 @@
 # 幂等：重复运行不会重复插入
 $ErrorActionPreference = 'Stop'
 
-$proj = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\01_firmware\keil\LVGL_template"
-$src  = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\01_firmware\ui"
+# 路径全部从脚本自身位置推导（05_scripts 的上一级 = WVAT）：
+# 以前写死 "C:\Users\李思颉\..."，用户名一换（=lisijie）整套脚本第一行就抛"找不到工程"。
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$proj = Join-Path $root '01_firmware\keil\LVGL_template'
+$src  = Join-Path $root '01_firmware\ui'
 
 if (-not (Test-Path $proj)) { throw "找不到工程：$proj" }
 
@@ -76,7 +79,11 @@ if ($p -notmatch 'lv_font_simsun_16_cjk\.c') {
 
 # ── 3. ui.c：开机进锁屏 + 启动指令链路 ──────────────────
 $uic = Join-Path $proj "User\GUI\ui.c"
-$u = Get-Content $uic -Raw
+# ui.c 是全项目唯一的 GBK 文件（ARMCC 在中文 Windows 下认它）。
+# 显式按 GBK 读写：Get-Content 的默认编码在 PS 5.1 是 ANSI、在 PS7 是 UTF-8，
+# 靠默认行为迟早会把中文注释写成 ???（drop_demo_screen.ps1 早就这么改了）。
+$gbk = [System.Text.Encoding]::GetEncoding(936)
+$u = $gbk.GetString([System.IO.File]::ReadAllBytes($uic))
 
 if ($u -notmatch 'user_link\.h') {
     $u = $u -replace '#include\s+"ui_main\.h"', "#include `"ui_main.h`"`r`n#include `"user_link.h`""
@@ -114,8 +121,8 @@ if ($u -notmatch 'user_i2s\.h') {
 if ($u -notmatch 'mic_boot_selftest') {
     $u = $u -replace '(clock_start_ui_timer\(\);[^\r\n]*)', "`$1`r`n    mic_boot_selftest();     /* I2S 麦克风自检：串口打印 [mic] */"
 }
-Set-Content -Path $uic -Value $u -NoNewline
-Write-Output "[3] ui.c: 舞台 + link_init() + RTC 时钟"
+[System.IO.File]::WriteAllBytes($uic, $gbk.GetBytes($u))
+Write-Output "[3] ui.c: 舞台 + link_init() + RTC 时钟（按 GBK 原编码写回）"
 
 # ── 4. 自检 ─────────────────────────────────────────────
 Write-Output "`n=== ui_init 现在长这样 ==="

@@ -3,8 +3,9 @@
 # 特性：改之前先备份到 _backup_before_ui/，可随时还原
 $ErrorActionPreference = 'Stop'
 
-$proj = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\01_firmware\keil\LVGL_template"
-$src  = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\01_firmware\ui"
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$proj = Join-Path $root '01_firmware\keil\LVGL_template'
+$src  = Join-Path $root '01_firmware\ui'
 $bak  = Join-Path $proj "_backup_before_ui"
 
 if (-not (Test-Path $proj)) { throw "找不到工程目录：$proj" }

@@ -150,16 +150,25 @@ WVAT\02_gateway\start_gateway.cmd
 手动方式（需要指定口号/演练模式时）：
 
 ```powershell
-# 1. 看进度
-cd WVAT; git log --oneline; git tag -l
+# 在 WVAT 目录下执行；路径全部从当前位置/用户目录推导，换机器不用改
+
+# 1. 看进度（git 已装好，见下方说明）
+git log --oneline; git tag -l
 
 # 2. 查口号（会变！）
 [System.IO.Ports.SerialPort]::GetPortNames()
 
 # 3. 手动启网关（真执行）
-$env:PYTHONPATH="C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\vendor\_pylibs"
-python WVAT\02_gateway\gateway.py --transport serial --serial-port COM13 --enable-actions
+#    必须用随附的 Python 3.12：cffi/vosk 的 C 扩展只按 cp312 编译
+$py = Join-Path $env:USERPROFILE ".dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe"
+$env:PYTHONPATH = Join-Path $PWD.Path "vendor\_pylibs"
+& $py "02_gateway\gateway.py" --transport serial --serial-port COM13 --enable-actions
 
 # 4. 只演练不动系统：去掉 --enable-actions
 # 5. 用启动器演练：start_gateway.cmd dry
 ```
+
+> **git 环境**：已装好 `git 2.56.1`（非管理员安装，位于
+> `%LOCALAPPDATA%\Programs\Git`，已加入用户 PATH，任意终端可用）。
+> 仓库现状：**95 次提交 / 10 个标签**，最新标签 `v0.10-hw-audit`（2026-11-10）。
+> 行尾与编码规矩见 `.gitattributes`：`*.ps1`/`*.bat` = CRLF，`*.md`/`*.py`/`*.csv` = LF。

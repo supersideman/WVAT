@@ -2,7 +2,8 @@
 # 只保留我们真正用到的：obj（基类）、label、line
 $ErrorActionPreference = 'Stop'
 
-$conf = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\01_firmware\keil\LVGL_template\Middlewares\LVGL\lv_conf.h"
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$conf = Join-Path $root '01_firmware\keil\LVGL_template\Middlewares\LVGL\lv_conf.h'
 $bak = "$conf.bak_trim"
 
 if (-not (Test-Path $conf)) { throw "找不到 lv_conf.h：$conf" }

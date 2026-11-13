@@ -3,7 +3,8 @@
 #       而且本项目从来没用到这个演示页面。
 $ErrorActionPreference = 'Stop'
 
-$proj = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\01_firmware\keil\LVGL_template"
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$proj = Join-Path $root '01_firmware\keil\LVGL_template'
 $uv   = Join-Path $proj "MDK-ARM\LCD.uvprojx"
 $uic  = Join-Path $proj "User\GUI\ui.c"
 

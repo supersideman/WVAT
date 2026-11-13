@@ -3,7 +3,8 @@
 #       对应的 .c 文件还必须被加进工程，否则链接报 L6218E 未定义符号
 $ErrorActionPreference = 'Stop'
 
-$uv = "C:\Users\李思颉\Documents\deepseek-harness\default-workspace\WVAT\01_firmware\keil\LVGL_template\MDK-ARM\LCD.uvprojx"
+$root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$uv = Join-Path $root '01_firmware\keil\LVGL_template\MDK-ARM\LCD.uvprojx'
 $bak = "$uv.bak_font44"
 
 if (-not (Test-Path $uv)) { throw "找不到工程：$uv" }
