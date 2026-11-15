@@ -9,9 +9,12 @@
  *      INMP441 的 24bit 数据在 32bit 时隙里**高位对齐**，取低 16 位只剩最低 8 位。
  *      所以这里直接读 32 位的 DR。
  *
- * I2S2 的两套可用引脚（F411 数据手册的复用表里都有）：
- *   主用（AF5）：WS=PB12  CK=PB13  SD=PB15   ← 核心板右排最上面两行
- *   备用（AF6）：WS=PB9   CK=PB10  SD=PC3    ← CK/SD 恰好在扩展板 2×9 上
+ * I2S2 的可用引脚（F411 复用表，**全部是 AF5**）：
+ *   主用：WS=PB12  CK=PB13  SD=PB15   ← 核心板右排最上面两行
+ *   备用：WS=PB9   CK=PB10  SD=PC3    ← CK/SD 恰好在扩展板 2×9 上
+ *
+ * ⚠️ AF 号必须是 5：HAL 头文件里 GPIO_AF5_SPI2 才注释成
+ *    "SPI2/I2S2 Alternate Function mapping"，GPIO_AF6_I2S2ext 是 I2S2ext_SD。
  *
  * 为什么让固件自动探测：
  *   AF5/AF6 具体哪套生效，文档之间有出入；与其让人反复烧板试，
@@ -56,7 +59,12 @@ typedef struct {
     const char   *name;
 } mic_pinset_t;
 
-/* 候选组合，开机依次探测，谁有数据用谁（顺序 = 优先级） */
+/* 候选组合，开机依次探测，谁有数据用谁（顺序 = 优先级）
+ *
+ * 三套的复用号**全是 AF5**：F411 上 SPI2/I2S2 就是 AF5。
+ * 早期版本把 ②③④ 写成 AF6 是错的（AF6 那几个脚是 I2S2ext_SD / SPI3），
+ * 结果 SCK 上没有波形，四套组合全部"没数据"。
+ */
 static const mic_pinset_t SET_LIST[] = {
     /* ① 全主用（三根都飞线到 PB12/13/15 时命中）*/
     { GPIOB, GPIO_PIN_12, GPIO_AF5_SPI2,
@@ -65,18 +73,13 @@ static const mic_pinset_t SET_LIST[] = {
 
     /* ② 混合：WS 飞 PB12，CK/SD 走扩展板 2×9 的 PB10/PC3（最省焊的方案）*/
     { GPIOB, GPIO_PIN_12, GPIO_AF5_SPI2,
-      GPIOB, GPIO_PIN_10, GPIO_AF6_SPI2,
-      GPIOC, GPIO_PIN_3,  GPIO_AF6_SPI2, "PB12 + PB10 + PC3 混合" },
+      GPIOB, GPIO_PIN_10, GPIO_AF5_SPI2,
+      GPIOC, GPIO_PIN_3,  GPIO_AF5_SPI2, "PB12 + PB10 + PC3 混合" },
 
-    /* ③ 混合的另一种 AF 猜测：PB12 若按 AF6 才通，这里兜住 */
-    { GPIOB, GPIO_PIN_12, GPIO_AF6_SPI2,
-      GPIOB, GPIO_PIN_10, GPIO_AF6_SPI2,
-      GPIOC, GPIO_PIN_3,  GPIO_AF6_SPI2, "PB12(AF6) + PB10 + PC3 混合" },
-
-    /* ④ 全备用：WS 飞 PB9，CK/SD 走 2×9 */
-    { GPIOB, GPIO_PIN_9,  GPIO_AF6_SPI2,
-      GPIOB, GPIO_PIN_10, GPIO_AF6_SPI2,
-      GPIOC, GPIO_PIN_3,  GPIO_AF6_SPI2, "PB9 + PB10 + PC3 全 AF6" },
+    /* ③ WS 飞 PB9（在主排针上，2×9 没有），CK/SD 走 2×9 */
+    { GPIOB, GPIO_PIN_9,  GPIO_AF5_SPI2,
+      GPIOB, GPIO_PIN_10, GPIO_AF5_SPI2,
+      GPIOC, GPIO_PIN_3,  GPIO_AF5_SPI2, "PB9 + PB10 + PC3 全 AF5" },
 };
 
 #define MIC_SET_COUNT (sizeof(SET_LIST) / sizeof(SET_LIST[0]))
@@ -146,7 +149,13 @@ static void mic_gpio_apply(const mic_pinset_t *p)
     g.Pin = p->sd_pin; g.Alternate = p->sd_af; HAL_GPIO_Init(p->sd_port, &g);
 }
 
-/** 配置 SPI2 的 I2S 模式（主机接收 / Philips / 24bit 数据 / 32bit 时隙） */
+/** 配置 SPI2 的 I2S 模式（**主机接收** / Philips / 24bit 数据 / 32bit 时隙）
+ *
+ * ⚠️ I2SCFG 是 bit9:8 两位（RM0383）：
+ *      00 = 从机发送   01 = 从机接收   10 = 主机发送   11 = 主机接收
+ *    早期版本只置 I2SCFG_0，等于配成"从机接收"——MCU 不产生 SCK/WS，
+ *    而 INMP441 必须由主机供时钟，于是永远读不到数据（换线也没用）。
+ */
 static void mic_i2s_apply(void)
 {
     __HAL_RCC_SPI2_CLK_ENABLE();
@@ -154,8 +163,8 @@ static void mic_i2s_apply(void)
     SPI2->I2SPR = (MIC_I2SDIV & SPI_I2SPR_I2SDIV) |
                   ((MIC_I2SODD << 8) & SPI_I2SPR_ODD);
     SPI2->I2SCFGR = SPI_I2SCFGR_I2SMOD
-                  | SPI_I2SCFGR_I2SCFG_0
-                  | SPI_I2SCFGR_DATLEN_0
+                  | SPI_I2SCFGR_I2SCFG_0 | SPI_I2SCFGR_I2SCFG_1  /* 11 = 主机接收 */
+                  | SPI_I2SCFGR_DATLEN_1   /* 10 = 32bit 数据：DR 一次读回整个槽，方便看位布局 */
                   | SPI_I2SCFGR_CHLEN;
     SPI2->I2SCFGR |= SPI_I2SCFGR_I2SE;
 }
@@ -178,6 +187,14 @@ static uint32_t mic_read_words(uint32_t *buf, uint32_t words, uint32_t timeout_m
     return got;
 }
 
+/** 探测诊断量：每次试一套引脚就刷新，失败时打印出来定位问题
+ *  got：实际读到的字数（< 请求数 = CK 没波形，RXNE 一直不置位）
+ *  chg：与基准字不同的字数（= 0 说明 SD 线上是死电平）
+ */
+static uint32_t s_dbg_got = 0;
+static uint32_t s_dbg_chg = 0;
+static uint32_t s_dbg_ref = 0;
+
 /** 试一套引脚：能读到数据、且数据有变化才算通过 */
 static bool mic_probe(const mic_pinset_t *p)
 {
@@ -186,12 +203,20 @@ static bool mic_probe(const mic_pinset_t *p)
     HAL_Delay(2);                      /* 让 CK/WS 先跑几个周期 */
 
     uint32_t got = mic_read_words(s_buf, MIC_PROBE_WORDS, MIC_PROBE_TIMEOUT_MS);
+    s_dbg_got = got;
+    s_dbg_chg = 0;
+    s_dbg_ref = 0;
     if (got < MIC_PROBE_WORDS) return false;
 
+    /* 基准取第 2 个字：第 1 个可能是清 OVR 后 DR 里的残留值，
+     * 用它当基准会造成"假通过"（曾因此误判 SD 已经通了）。 */
+    uint32_t ref = s_buf[1];
+    s_dbg_ref = ref;
     uint32_t changed = 0;
-    for (uint32_t i = 1; i < MIC_PROBE_WORDS; i++) {
-        if (s_buf[i] != s_buf[0]) changed++;
+    for (uint32_t i = 2; i < MIC_PROBE_WORDS; i++) {
+        if (s_buf[i] != ref) changed++;
     }
+    s_dbg_chg = changed;
     return changed > 8;                /* 完全不变 = 假数据 */
 }
 
@@ -206,9 +231,20 @@ bool mic_init(void)
         return false;
     }
 
-    /* 依次试所有候选组合，第一个能收到数据的即为生效配置 */
+    /* 依次试所有候选组合，第一个能收到数据的即为生效配置。
+     * 每套都打印 got/chg，失败时一眼能看出是"没时钟"还是"数据不动"：
+     *   got < 256     → CK 没波形（RXNE 一直不置位）
+     *   got=256 chg=0 → 有时钟但 SD 线上是死电平（悬空/未供电/WS 没接）
+     */
+    char line[120];
     for (uint32_t i = 0; i < MIC_SET_COUNT; i++) {
-        if (mic_probe(&SET_LIST[i])) {
+        bool ok = mic_probe(&SET_LIST[i]);
+        snprintf(line, sizeof(line), "[mic] p%lu %s got=%lu/%u chg=%lu ref=%08lX\r\n",
+                 (unsigned long)(i + 1), SET_LIST[i].name,
+                 (unsigned long)s_dbg_got, (unsigned)MIC_PROBE_WORDS,
+                 (unsigned long)s_dbg_chg, (unsigned long)s_dbg_ref);
+        mic_print(line);
+        if (ok) {
             s_active = &SET_LIST[i];
             break;
         }
@@ -241,6 +277,10 @@ uint32_t mic_last_peak(void)
 void mic_boot_selftest(void)
 {
 #if MIC_SELFTEST_ON_BOOT
+    /* 固件版本戳：先打印，再探测。任何时候都能一眼确认烧进去的是哪一版——
+     * 之前有过改了代码没重编、F8 把旧固件烧进去，对着旧行为查了半天接线。 */
+    mic_print("[mic] fw=v7 d32+quarters\r\n");
+
     if (!mic_init()) return;
 
     char line[80];
@@ -250,6 +290,12 @@ void mic_boot_selftest(void)
     mic_print("[mic] lvl: ");
 
     uint32_t peak_l = 0, peak_r = 0;
+    /* 把 1 秒切成 4 段，分别记峰值。
+     * 用法：前半秒别出声、后半秒大声喊 —— 若 Q2/Q3 明显大于 Q0/Q1，
+     * 说明音频链路是通的（只是取位不对）；若四段一样，说明没拿到真实音频。 */
+    uint32_t q_peak[4] = {0, 0, 0, 0};
+    uint32_t pk_hi = 0;               /* 高 16 位峰值 */
+    uint32_t pk_lo = 0;               /* 低 16 位峰值 */
     uint64_t sum_l2 = 0, sum_r2 = 0;
     uint32_t n = 0, printed = 0;
 
@@ -259,10 +305,24 @@ void mic_boot_selftest(void)
             return;
         }
 
+        if (c == 0) {
+            /* 第一块打原始 8 个字（两个 4 字帧），能看出数据落在哪个位置 */
+            snprintf(line, sizeof(line), "[mic] raw: %08lX %08lX %08lX %08lX\r\n",
+                     (unsigned long)s_buf[0], (unsigned long)s_buf[1],
+                     (unsigned long)s_buf[2], (unsigned long)s_buf[3]);
+            mic_print(line);
+            snprintf(line, sizeof(line), "[mic] raw: %08lX %08lX %08lX %08lX\r\n",
+                     (unsigned long)s_buf[4], (unsigned long)s_buf[5],
+                     (unsigned long)s_buf[6], (unsigned long)s_buf[7]);
+            mic_print(line);
+        }
+
         uint32_t blk_peak = 0;
         for (uint32_t i = 0; i + 1 < MIC_CHUNK_WORDS; i += 2) {
-            int32_t l = (int32_t)((int16_t)(s_buf[i] >> 16));
-            int32_t r = (int32_t)((int16_t)(s_buf[i + 1] >> 16));
+            uint32_t wl = s_buf[i], wr = s_buf[i + 1];
+
+            int32_t l = (int32_t)((int16_t)(wl >> 16));
+            int32_t r = (int32_t)((int16_t)(wr >> 16));
             uint32_t al = (uint32_t)(l < 0 ? -l : l);
             uint32_t ar = (uint32_t)(r < 0 ? -r : r);
 
@@ -272,6 +332,30 @@ void mic_boot_selftest(void)
             sum_l2 += (uint64_t)(l * l);
             sum_r2 += (uint64_t)(r * r);
             n++;
+
+            /* 高/低 16 位各算峰值；同时记录本块最大值到所在的那 1/4 秒 */
+            {
+                int32_t b0 = (int32_t)((int16_t)(wl & 0xFFFFu));
+                int32_t b1 = (int32_t)((int16_t)(wr & 0xFFFFu));
+                uint32_t a0 = (uint32_t)(b0 < 0 ? -b0 : b0);
+                uint32_t a1 = (uint32_t)(b1 < 0 ? -b1 : b1);
+                if (a0 > pk_lo) pk_lo = a0;
+                if (a1 > pk_lo) pk_lo = a1;
+
+                int32_t h0 = (int32_t)((int16_t)(wl >> 16));
+                int32_t h1 = (int32_t)((int16_t)(wr >> 16));
+                uint32_t q0 = (uint32_t)(h0 < 0 ? -h0 : h0);
+                uint32_t q1 = (uint32_t)(h1 < 0 ? -h1 : h1);
+                if (q0 > pk_hi) pk_hi = q0;
+                if (q1 > pk_hi) pk_hi = q1;
+
+                uint32_t m = a0 > a1 ? a0 : a1;
+                if (q0 > m) m = q0;
+                if (q1 > m) m = q1;
+                uint32_t qi = (c * 4u) / MIC_CHUNKS;   /* 落在第几个 1/4 秒 */
+                if (qi > 3) qi = 3;
+                if (m > q_peak[qi]) q_peak[qi] = m;
+            }
         }
 
         char ch = '0';
@@ -298,12 +382,26 @@ void mic_boot_selftest(void)
              (unsigned long)peak_r, (unsigned long)rms_r, (unsigned long)n);
     mic_print(line);
 
-    if (peak_l > 200) {
-        mic_print("[mic] OK：左声道有信号，接线正确\r\n");
-    } else if (peak_r > 200) {
-        mic_print("[mic] 右声道有声、左声道无：L/R 接到了 3V3（应接 GND）\r\n");
+    /* 高/低 16 位峰值 + 4 段峰值（判断"声音有没有进来"的关键） */
+    snprintf(line, sizeof(line), "[mic] pk hi=%lu lo=%lu\r\n",
+             (unsigned long)pk_hi, (unsigned long)pk_lo);
+    mic_print(line);
+    snprintf(line, sizeof(line), "[mic] Q0=%lu Q1=%lu Q2=%lu Q3=%lu\r\n",
+             (unsigned long)q_peak[0], (unsigned long)q_peak[1],
+             (unsigned long)q_peak[2], (unsigned long)q_peak[3]);
+    mic_print(line);
+
+    uint32_t qmax = q_peak[0];
+    for (int i = 1; i < 4; i++) if (q_peak[i] > qmax) qmax = q_peak[i];
+    uint32_t qmin = q_peak[0];
+    for (int i = 1; i < 4; i++) if (q_peak[i] < qmin) qmin = q_peak[i];
+
+    if (qmax > 200 && qmax > qmin * 2) {
+        mic_print("[mic] OK：声音进来了（后段明显大于前段）\r\n");
+    } else if (qmax > 200) {
+        mic_print("[mic] 有信号但四段接近：不随声音变化，查 WS（帧同步）\r\n");
     } else {
-        mic_print("[mic] 两声道都接近 0：查 SD 线、3V3/GND 供电\r\n");
+        mic_print("[mic] 四段都接近 0：SD 线或供电问题\r\n");
     }
 #endif /* MIC_SELFTEST_ON_BOOT */
 }

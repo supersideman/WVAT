@@ -19,6 +19,7 @@
 01_firmware/keil/**/*.hex
 01_firmware/keil/**/*.bin
 01_firmware/keil/**/*.htm
+01_firmware/keil/**/*.lst
 01_firmware/keil/**/*.uvguix.*
 01_firmware/keil/**/JLinkLog.txt
 01_firmware/keil/**/*.bak_*

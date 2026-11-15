@@ -2,10 +2,10 @@
  * @file    user_i2s.h
  * @brief   I2S2 数字麦克风采集（INMP441 / ICS-43434 一类）
  *
- * 两套可用接线（固件开机会自动探测哪套通）：
+ * 两套可用接线（固件开机会自动探测哪套通），**复用号全是 AF5**：
  *
- *   主用（AF5）：INMP441 SCK→PB13  WS→PB12  SD→PB15
- *   备用（AF6）：INMP441 SCK→PB10  WS→PB9   SD→PC3
+ *   主用：INMP441 SCK→PB13  WS→PB12  SD→PB15
+ *   备用：INMP441 SCK→PB10  WS→PB9   SD→PC3
  *
  *   两套都需要：VDD→3V3（⚠️ 绝不能接 5V）、GND→GND、L/R→GND（选左声道）
  *   备用组合的好处：CK/SD 在扩展板 2×9 上，只需为 WS 焊一根线。
