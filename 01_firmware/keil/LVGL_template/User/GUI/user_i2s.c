@@ -334,7 +334,7 @@ void mic_boot_selftest(void)
 #if MIC_SELFTEST_ON_BOOT
     /* 固件版本戳：先打印，再探测。任何时候都能一眼确认烧进去的是哪一版——
      * 之前有过改了代码没重编、F8 把旧固件烧进去，对着旧行为查了半天接线。 */
-    mic_print("[mic] fw=v11 flipQ\r\n");
+    mic_print("[mic] fw=v12 means\r\n");
 
     /* 引脚身份自测：把待查那根线的模块端插到 2×9 上排第 2 孔（PB2）后复位，
      * 串口会打印 pinid 那一行，指出这根线到底焊在哪个脚上。 */
@@ -357,7 +357,16 @@ void mic_boot_selftest(void)
     /* 逐位翻转统计：flip_cnt[字序%4][bit] 记录该位翻转了多少次 */
     uint32_t flip_cnt[4][32];
     uint32_t flip_prev[4] = {0, 0, 0, 0};
-    uint32_t q_flip[4] = {0, 0, 0, 0};   /* 每 1/4 秒的总翻转数 = 音量指标 */
+    uint32_t q_flip[4] = {0, 0, 0, 0};   /* 每 1/4 秒的总翻转数 */
+    /* 按三种"位偏移"分别累计幅度平均值，找出真正承载音频的那一种：
+     *   m16 = word >> 16      （数据在时隙高位）
+     *   m8  = (word >> 8) & 0xFFFF（数据整体偏移 8 位）
+     *   m0  = word & 0xFFFF   （数据在低位）
+     * 只累加绝对值，噪音（高阻位）在均值里影响小，音量变化能反映出来。 */
+    uint64_t sum_m16[4] = {0, 0, 0, 0};
+    uint64_t sum_m8[4]  = {0, 0, 0, 0};
+    uint64_t sum_m0[4]  = {0, 0, 0, 0};
+    uint32_t nq[4] = {0, 0, 0, 0};
     int      flip_ready = 0;
     for (int a = 0; a < 4; a++) {
         for (int b = 0; b < 32; b++) flip_cnt[a][b] = 0;
@@ -396,8 +405,20 @@ void mic_boot_selftest(void)
         uint32_t qi_f = (c * 4u) / MIC_CHUNKS;
         if (qi_f > 3) qi_f = 3;
         for (uint32_t i = 0; i < MIC_CHUNK_WORDS; i++) {
-            uint32_t pos = i & 3u;
             uint32_t w = s_buf[i];
+
+            /* 三种位偏移的幅度累计 */
+            {
+                int32_t a16 = (int32_t)((int16_t)((w >> 16) & 0xFFFFu));
+                int32_t a8  = (int32_t)((int16_t)((w >> 8)  & 0xFFFFu));
+                int32_t a0  = (int32_t)((int16_t)(w & 0xFFFFu));
+                sum_m16[qi_f] += (uint64_t)(a16 < 0 ? -a16 : a16);
+                sum_m8[qi_f]  += (uint64_t)(a8  < 0 ? -a8  : a8);
+                sum_m0[qi_f]  += (uint64_t)(a0  < 0 ? -a0  : a0);
+                nq[qi_f]++;
+            }
+
+            uint32_t pos = i & 3u;
             if (flip_ready) {
                 uint32_t x = w ^ flip_prev[pos];
                 if (x) {
@@ -498,6 +519,29 @@ void mic_boot_selftest(void)
         }
         bar[32] = '\0';
         snprintf(line, sizeof(line), "[mic] act%d %s\r\n", a, bar);
+        mic_print(line);
+    }
+
+    /* 三种位偏移的"每 1/4 秒平均幅度"——哪一组跟着喊叫变大，就用哪一组取样本 */
+    {
+        uint64_t m16[4], m8[4], m0[4];
+        for (int q = 0; q < 4; q++) {
+            uint32_t d = nq[q] ? nq[q] : 1;
+            m16[q] = sum_m16[q] / d;
+            m8[q]  = sum_m8[q]  / d;
+            m0[q]  = sum_m0[q]  / d;
+        }
+        snprintf(line, sizeof(line), "[mic] m16 %lu %lu %lu %lu\r\n",
+                 (unsigned long)m16[0], (unsigned long)m16[1],
+                 (unsigned long)m16[2], (unsigned long)m16[3]);
+        mic_print(line);
+        snprintf(line, sizeof(line), "[mic] m8  %lu %lu %lu %lu\r\n",
+                 (unsigned long)m8[0], (unsigned long)m8[1],
+                 (unsigned long)m8[2], (unsigned long)m8[3]);
+        mic_print(line);
+        snprintf(line, sizeof(line), "[mic] m0  %lu %lu %lu %lu\r\n",
+                 (unsigned long)m0[0], (unsigned long)m0[1],
+                 (unsigned long)m0[2], (unsigned long)m0[3]);
         mic_print(line);
     }
 
