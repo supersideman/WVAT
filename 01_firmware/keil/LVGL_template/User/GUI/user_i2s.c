@@ -274,12 +274,72 @@ uint32_t mic_last_peak(void)
     return s_last_peak;
 }
 
+#if 0
+/* ⚠️ 排查工具，默认不编译（否则 ARMCC 会警告"定义了没引用"）。
+ * 需要时把下面的 #if 0 改成 #if 1，并在 mic_boot_selftest() 里取消
+ * mic_pin_id_test(); 的注释即可。
+ *
+ * 用芯片自己当"通断表"，查出那根待测飞线焊在了哪个脚上。
+ *
+ * 用法（不需要万用表）：
+ *   1) 把待查那根线的**模块端**拔下来，插到 2×9 上排第 2 孔（PB2，本测试当信号源）
+ *   2) 复位，看串口 [mic] pinid 那一行
+ *   3) 哪个脚打印 1，就说明这根线焊的是哪个脚；全 0 = 线断/虚焊/接触不良
+ *
+ * 原理：PB2 输出高电平 → 经"焊盘→母座→核心板引脚→飞线"回到探测脚，
+ *       探测脚全设下拉输入，被拉高的那个就是同一条网络。
+ */
+static void mic_pin_id_test(void)
+{
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+
+    GPIO_InitTypeDef g = {0};
+    g.Speed = GPIO_SPEED_FREQ_LOW;
+
+    /* 信号源：PB2 推挽输出高 */
+    g.Mode = GPIO_MODE_OUTPUT_PP;
+    g.Pull = GPIO_NOPULL;
+    g.Pin  = GPIO_PIN_2;
+    HAL_GPIO_Init(GPIOB, &g);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2, GPIO_PIN_SET);
+
+    /* 探测脚：全部下拉输入 */
+    g.Mode = GPIO_MODE_INPUT;
+    g.Pull = GPIO_PULLDOWN;
+    const uint16_t probe[5] = { GPIO_PIN_9, GPIO_PIN_12, GPIO_PIN_13, GPIO_PIN_14, GPIO_PIN_15 };
+    for (int i = 0; i < 5; i++) {
+        g.Pin = probe[i];
+        HAL_GPIO_Init(GPIOB, &g);
+    }
+    HAL_Delay(5);
+
+    char line[96];
+    snprintf(line, sizeof(line),
+             "[mic] pinid PB9=%d PB12=%d PB13=%d PB14=%d PB15=%d\r\n",
+             HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_9)  == GPIO_PIN_SET,
+             HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_12) == GPIO_PIN_SET,
+             HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_SET,
+             HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14) == GPIO_PIN_SET,
+             HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_15) == GPIO_PIN_SET);
+    mic_print(line);
+
+    /* 收工：PB2 恢复成普通输入，探测脚也放掉 */
+    g.Pin = GPIO_PIN_2;
+    HAL_GPIO_Init(GPIOB, &g);
+}
+#endif /* 引脚自测工具的 #if 0 */
+
 void mic_boot_selftest(void)
 {
 #if MIC_SELFTEST_ON_BOOT
     /* 固件版本戳：先打印，再探测。任何时候都能一眼确认烧进去的是哪一版——
      * 之前有过改了代码没重编、F8 把旧固件烧进去，对着旧行为查了半天接线。 */
-    mic_print("[mic] fw=v7 d32+quarters\r\n");
+    mic_print("[mic] fw=v11 flipQ\r\n");
+
+    /* 引脚身份自测：把待查那根线的模块端插到 2×9 上排第 2 孔（PB2）后复位，
+     * 串口会打印 pinid 那一行，指出这根线到底焊在哪个脚上。 */
+    /* 引脚自测已确认飞线焊在 PB12 上，默认不再执行；需要时取消注释 */
+    /* mic_pin_id_test(); */
 
     if (!mic_init()) return;
 
@@ -294,6 +354,14 @@ void mic_boot_selftest(void)
      * 用法：前半秒别出声、后半秒大声喊 —— 若 Q2/Q3 明显大于 Q0/Q1，
      * 说明音频链路是通的（只是取位不对）；若四段一样，说明没拿到真实音频。 */
     uint32_t q_peak[4] = {0, 0, 0, 0};
+    /* 逐位翻转统计：flip_cnt[字序%4][bit] 记录该位翻转了多少次 */
+    uint32_t flip_cnt[4][32];
+    uint32_t flip_prev[4] = {0, 0, 0, 0};
+    uint32_t q_flip[4] = {0, 0, 0, 0};   /* 每 1/4 秒的总翻转数 = 音量指标 */
+    int      flip_ready = 0;
+    for (int a = 0; a < 4; a++) {
+        for (int b = 0; b < 32; b++) flip_cnt[a][b] = 0;
+    }
     uint32_t pk_hi = 0;               /* 高 16 位峰值 */
     uint32_t pk_lo = 0;               /* 低 16 位峰值 */
     uint64_t sum_l2 = 0, sum_r2 = 0;
@@ -306,16 +374,42 @@ void mic_boot_selftest(void)
         }
 
         if (c == 0) {
-            /* 第一块打原始 8 个字（两个 4 字帧），能看出数据落在哪个位置 */
-            snprintf(line, sizeof(line), "[mic] raw: %08lX %08lX %08lX %08lX\r\n",
-                     (unsigned long)s_buf[0], (unsigned long)s_buf[1],
-                     (unsigned long)s_buf[2], (unsigned long)s_buf[3]);
-            mic_print(line);
-            snprintf(line, sizeof(line), "[mic] raw: %08lX %08lX %08lX %08lX\r\n",
-                     (unsigned long)s_buf[4], (unsigned long)s_buf[5],
-                     (unsigned long)s_buf[6], (unsigned long)s_buf[7]);
-            mic_print(line);
+            /* 打印前 4 帧的比特图（每帧 2 个 32 位字），用于观察位布局 */
+            for (int f = 0; f < 2; f++) {
+                for (int h = 0; h < 2; h++) {
+                    uint32_t w = s_buf[f * 2 + h];
+                    char bits[33];
+                    for (int b = 0; b < 32; b++) {
+                        bits[b] = (w & (0x80000000u >> b)) ? '1' : '0';
+                    }
+                    bits[32] = '\0';
+                    snprintf(line, sizeof(line), "[mic] f%d.%d %s\r\n", f, h, bits);
+                    mic_print(line);
+                }
+            }
         }
+
+        /* 逐位统计"翻转次数"：某一 bit 在相邻采样之间翻转得多，
+         * 就说明它在跟着声音变化。安静时音频位几乎不翻，喊叫时会大量翻转。
+         * 同时按 1/4 秒累计总翻转数，作为"音量"指标——
+         * 它不会被数据里恒定的数值（如 0x8000）撑满，比峰值可靠。 */
+        uint32_t qi_f = (c * 4u) / MIC_CHUNKS;
+        if (qi_f > 3) qi_f = 3;
+        for (uint32_t i = 0; i < MIC_CHUNK_WORDS; i++) {
+            uint32_t pos = i & 3u;
+            uint32_t w = s_buf[i];
+            if (flip_ready) {
+                uint32_t x = w ^ flip_prev[pos];
+                if (x) {
+                    q_flip[qi_f] += 1;
+                    for (int b = 0; b < 32; b++) {
+                        if (x & (0x80000000u >> b)) flip_cnt[pos][b]++;
+                    }
+                }
+            }
+            flip_prev[pos] = w;
+        }
+        flip_ready = 1;
 
         uint32_t blk_peak = 0;
         for (uint32_t i = 0; i + 1 < MIC_CHUNK_WORDS; i += 2) {
@@ -391,9 +485,31 @@ void mic_boot_selftest(void)
              (unsigned long)q_peak[2], (unsigned long)q_peak[3]);
     mic_print(line);
 
+    /* 逐位活动图：flip_cnt 归一成 0~9，哪个 bit 位是 9 就说明它在跟着声音翻 */
+    uint32_t fmax = 1;
+    for (int a = 0; a < 4; a++)
+        for (int b = 0; b < 32; b++)
+            if (flip_cnt[a][b] > fmax) fmax = flip_cnt[a][b];
+    for (int a = 0; a < 4; a++) {
+        char bar[33];
+        for (int b = 0; b < 32; b++) {
+            uint32_t d = (uint32_t)(((uint64_t)flip_cnt[a][b] * 9u) / fmax);
+            bar[b] = (char)('0' + (d > 9 ? 9 : d));
+        }
+        bar[32] = '\0';
+        snprintf(line, sizeof(line), "[mic] act%d %s\r\n", a, bar);
+        mic_print(line);
+    }
+
+    /* 音量指标：每 1/4 秒的总翻转次数。前半秒安静、后半秒喊，后两段应明显更大 */
+    snprintf(line, sizeof(line), "[mic] flipQ %lu %lu %lu %lu\r\n",
+             (unsigned long)q_flip[0], (unsigned long)q_flip[1],
+             (unsigned long)q_flip[2], (unsigned long)q_flip[3]);
+    mic_print(line);
+
     uint32_t qmax = q_peak[0];
-    for (int i = 1; i < 4; i++) if (q_peak[i] > qmax) qmax = q_peak[i];
     uint32_t qmin = q_peak[0];
+    for (int i = 1; i < 4; i++) if (q_peak[i] > qmax) qmax = q_peak[i];
     for (int i = 1; i < 4; i++) if (q_peak[i] < qmin) qmin = q_peak[i];
 
     if (qmax > 200 && qmax > qmin * 2) {
