@@ -92,28 +92,38 @@ def list_bt_ports():
 def probe_bt_port(port: str, timeout: float = 2.5) -> bool:
     """往这个口发一条 OV+PING，看有没有 OV+PONG 回来。
 
-    固件那边收到 PING 会回 PONG（user_link.c 的 s_pong_pending），
-    所以"有回应"就等于"这个口能真正收发"。这是判断两个蓝牙口哪个对的
-    最可靠办法，比挨个试快得多。
-    """
-    import time
+    固件收到 PING 会回 PONG（user_link.c 的 s_pong_pending），
+    所以"有回应"就等于"这个口能真正收发"。
 
-    try:
-        import serial
-    except ImportError:
-        return False
-    try:
-        with serial.Serial(port, 9600, timeout=0.2) as sp:
-            sp.reset_input_buffer()
-            sp.write(b"OV+PING\r\n")
-            t0 = time.time()
-            while time.time() - t0 < timeout:
-                line = sp.readline()
-                if b"OV+PONG" in line:
-                    return True
-    except Exception:
-        return False
-    return False
+    ⚠️ 必须在**子线程 + 硬超时**里做：Windows 的蓝牙 SPP 口在建立链路时，
+       serial.Serial() 的 open() 可能卡几十秒甚至一直不返回（踩过：
+       主线程直接 open 会卡死，界面停在"逐个探测"没有任何输出）。
+       线程是 daemon，卡住也不影响继续往下走。
+    """
+    import threading
+
+    result = {"ok": False}
+
+    def _run() -> None:
+        try:
+            import serial
+            import time as _t
+            with serial.Serial(port, 9600, timeout=0.2, write_timeout=1.0) as sp:
+                sp.reset_input_buffer()
+                sp.write(b"OV+PING\r\n")
+                t0 = _t.time()
+                while _t.time() - t0 < timeout:
+                    line = sp.readline()
+                    if b"OV+PONG" in line:
+                        result["ok"] = True
+                        return
+        except Exception:
+            pass
+
+    th = threading.Thread(target=_run, daemon=True)
+    th.start()
+    th.join(timeout + 3.0)          # 打开卡住也只等这么久
+    return result["ok"]
 
 
 if not port:
@@ -131,10 +141,14 @@ if not port:
             time.sleep(0.5)
 
         if cands:
-            print("[launcher] 发现蓝牙串口，逐个探测（每个 2.5 秒）：")
+            print("[launcher] 发现蓝牙串口：")
             for dev, desc in cands:
+                print(f"           {dev}   {desc}")
+            print("[launcher] 逐个探测（每个最多 5 秒）：", flush=True)
+            for dev, desc in cands:
+                print(f"           {dev}  探测中…", flush=True)
                 ok = probe_bt_port(dev)
-                print(f"           {dev}  {'✅ 有回应' if ok else '✗ 无回应'}   {desc}")
+                print(f"           {dev}  {'✅ 有回应' if ok else '✗ 无回应'}", flush=True)
                 if ok:
                     port = dev
                     break
