@@ -11,6 +11,7 @@
 param(
     [switch]$Dry,      # 演练模式：不真正操作电脑
     [switch]$Fake,     # 不启用语音识别
+    [switch]$Bt,       # 走蓝牙（HC-05，9600），不找 CH340
     [string]$Port = "" # 手动指定串口，如 COM13
 )
 
@@ -58,6 +59,7 @@ Write-Info "[launcher] pylibs: $pylibs"
 $argv = @("run_gateway.py")
 if ($Dry)  { $argv += "-Dry" }
 if ($Fake) { $argv += "fake" }
+if ($Bt)   { $argv += "bt" }
 if ($Port) { $argv += "-Port"; $argv += $Port }
 
 Write-Info "[launcher] 参数: $($argv -join ' ')"

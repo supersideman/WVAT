@@ -18,6 +18,21 @@
 #define LINK_LINE_MAX   96
 #define LINK_POLL_MS    30
 
+/* ── 蓝牙（HC-05）第二通道 ────────────────────────────────────
+ * 接线：HC-05 TXD → PA3（USART2_RX）
+ *       HC-05 RXD → PA2（USART2_TX，飞线）
+ *       VCC → 3V3、GND → GND、EN/KEY 悬空、STATE 不接
+ *
+ * 波特率：HC-05 出厂是 9600 8N1（**不是** USART1 的 115200）。
+ * 想改成 115200 得先让它进 AT 模式（EN 拉高再上电，38400 发 AT+BAUD8），
+ * 改完只需把下面的 BT_BAUD 跟着改，其余代码一行都不用动。
+ */
+#define BT_BAUD         9600u
+#define BT_TX_TIMEOUT   100
+
+/* 发出去的数据同时送到 USB 串口和蓝牙：
+ * 网关接在哪一路都能用，不用在固件里选。 */
+
 /* ── 接收侧（中断里只写这些）───────────────────────────── */
 static uint8_t s_rx_byte;
 static char    s_line[LINK_LINE_MAX];
@@ -43,6 +58,66 @@ static char s_asr_buf[96];
 /* ── 发送侧 ───────────────────────────────────────────── */
 static uint8_t    s_req_id  = 0;
 static ui_icon_t  s_pending = UI_ICON_MUSIC;   /* 正在等回执的意图 */
+
+/* ── 蓝牙通道（USART2）状态 ───────────────────────────── */
+static UART_HandleTypeDef s_huart_bt;
+static uint8_t  s_bt_rx_byte;
+static char     s_bt_line[LINK_LINE_MAX];
+static volatile uint16_t s_bt_len = 0;
+static bool     s_bt_ready = false;
+static volatile bool s_bt_first_frame = false;   /* 收到第一帧时在 USB 上提示一次 */
+
+/** 往 USB 串口打一行调试信息（设备启动日志走这里） */
+static void link_dbg(const char *s)
+{
+    HAL_UART_Transmit(&huart1, (uint8_t *)s, (uint16_t)strlen(s), 100);
+}
+
+/** 把一帧同时发到 USB 串口和蓝牙（谁连着网关谁就能收到） */
+static void link_send_frame(const char *buf, int n)
+{
+    if (n <= 0) return;
+    HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)n, BT_TX_TIMEOUT);
+    if (s_bt_ready) {
+        HAL_UART_Transmit(&s_huart_bt, (uint8_t *)buf, (uint16_t)n, BT_TX_TIMEOUT);
+    }
+}
+
+/** 初始化蓝牙通道：USART2 @ 9600，PA2=TX / PA3=RX（都是 AF7） */
+static void bt_init(void)
+{
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_USART2_CLK_ENABLE();
+
+    GPIO_InitTypeDef g = {0};
+    g.Pin       = GPIO_PIN_2 | GPIO_PIN_3;
+    g.Mode      = GPIO_MODE_AF_PP;
+    g.Pull      = GPIO_PULLUP;          /* 模块没接时 RX 不会乱捡电平 */
+    g.Speed     = GPIO_SPEED_FREQ_VERY_HIGH;
+    g.Alternate = GPIO_AF7_USART2;
+    HAL_GPIO_Init(GPIOA, &g);
+
+    s_huart_bt.Instance          = USART2;
+    s_huart_bt.Init.BaudRate     = BT_BAUD;
+    s_huart_bt.Init.WordLength   = UART_WORDLENGTH_8B;
+    s_huart_bt.Init.StopBits     = UART_STOPBITS_1;
+    s_huart_bt.Init.Parity       = UART_PARITY_NONE;
+    s_huart_bt.Init.Mode         = UART_MODE_TX_RX;
+    s_huart_bt.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
+    s_huart_bt.Init.OverSampling = UART_OVERSAMPLING_16;
+
+    if (HAL_UART_Init(&s_huart_bt) != HAL_OK) {
+        link_dbg("[bt] USART2 初始化失败\r\n");
+        return;
+    }
+
+    HAL_UART_Receive_IT(&s_huart_bt, &s_bt_rx_byte, 1);
+    HAL_NVIC_SetPriority(USART2_IRQn, 5, 1);
+    HAL_NVIC_EnableIRQ(USART2_IRQn);
+
+    s_bt_ready = true;
+    link_dbg("[bt] USART2 ready @9600 (PA2=TX, PA3=RX)\r\n");
+}
 
 /* ═══════════════════════ 工具 ═══════════════════════ */
 
@@ -73,7 +148,7 @@ void link_send_intent(ui_icon_t kind)
     int n = snprintf(buf, sizeof(buf), "OV+AI=%u,%s\r\n",
                      (unsigned)s_req_id, link_code_of(kind));
     if (n > 0) {
-        HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)n, 100);
+        link_send_frame(buf, n);
     }
 }
 
@@ -89,7 +164,7 @@ void link_send_text(const char *text)
     int n = snprintf(buf, sizeof(buf), "OV+AI=%u,T,%s\r\n",
                      (unsigned)s_req_id, text);
     if (n > 0) {
-        HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)n, 100);
+        link_send_frame(buf, n);
     }
 }
 /** 通知网关开始/结束录音（电脑麦克风兜底方案用）
@@ -103,7 +178,7 @@ void link_send_mic_ctrl(bool start)
     int n = snprintf(buf, sizeof(buf), "OV+AI=%u,A08,%s\r\n",
                      (unsigned)s_req_id, start ? "start" : "stop");
     if (n > 0) {
-        HAL_UART_Transmit(&huart1, (uint8_t *)buf, (uint16_t)n, 100);
+        link_send_frame(buf, n);
     }
 }
 
@@ -176,7 +251,8 @@ static void link_parse_line(char *line)
     /* 其它帧（PING/PONG 等）忽略 */
 }
 
-/** USART1 单字节接收完成中断（HAL 的 __weak 回调，这里覆盖它） */
+/** USART1 单字节接收完成中断（HAL 的 __weak 回调，这里覆盖它）
+ *  同一套协议也跑在 USART2（蓝牙）上，两路各自攒行、共用解析。 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1) {
@@ -195,6 +271,29 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             }
         }
         HAL_UART_Receive_IT(&huart1, &s_rx_byte, 1);
+    } else if (huart->Instance == USART2) {
+        char c = (char)s_bt_rx_byte;
+
+        /* 收到蓝牙第一帧时在 USB 上提示一次：说明蓝牙链路真的通了 */
+        if (!s_bt_first_frame) {
+            s_bt_first_frame = true;
+            link_dbg("[bt] 收到第一帧，蓝牙链路已通\r\n");
+        }
+
+        if (c == '\n') {
+            if (s_bt_len > 0) {
+                s_bt_line[s_bt_len] = '\0';
+                link_parse_line(s_bt_line);
+                s_bt_len = 0;
+            }
+        } else if (c != '\r') {
+            if (s_bt_len < LINK_LINE_MAX - 1) {
+                s_bt_line[s_bt_len++] = c;
+            } else {
+                s_bt_len = 0;
+            }
+        }
+        HAL_UART_Receive_IT(&s_huart_bt, &s_bt_rx_byte, 1);
     }
 }
 
@@ -208,6 +307,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 void USART1_IRQHandler(void)
 {
     HAL_UART_IRQHandler(&huart1);
+}
+
+/** USART2（蓝牙）中断入口 */
+void USART2_IRQHandler(void)
+{
+    HAL_UART_IRQHandler(&s_huart_bt);
 }
 
 /** 在 LVGL 任务上下文里跑，所以可以安全地动控件 */
@@ -274,6 +379,9 @@ void link_init(void)
 
     /* 启动中断接收 */
     HAL_UART_Receive_IT(&huart1, &s_rx_byte, 1);
+
+    /* 蓝牙通道（USART2 @9600）。初始化失败也不影响 USB 那条链路 */
+    bt_init();
 
     /* 使能 USART1 中断（CubeMX 没开，我们自己开）
      * 优先级 5：不高于 configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY，

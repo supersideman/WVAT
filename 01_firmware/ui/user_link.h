@@ -1,6 +1,13 @@
 ﻿/**
  * @file    user_link.h
- * @brief   手表 ↔ PC 网关的指令链路（走 USART1 / CH340N，115200 8N1）
+ * @brief   手表 ↔ PC 网关的指令链路
+ *
+ * **两路并行**（同一套协议，谁的网关在线谁就能收）：
+ *   USART1 / CH340N  115200 8N1  —— USB 有线
+ *   USART2 / HC-05     9600 8N1  —— 蓝牙（PA2=TX, PA3=RX, AF7）
+ *
+ * 发送时两个口都发；接收时两路各自攒行、共用同一个解析器。
+ * 蓝牙初始化失败不影响 USB 那条链路。
  *
  * 协议（与 PC 端 gateway.py 完全一致）：
  *   手表 → PC   OV+AI=<REQ_ID>,<CODE>\r\n
