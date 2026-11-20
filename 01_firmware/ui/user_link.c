@@ -55,6 +55,11 @@ static char s_reply_buf[64];
 static volatile bool s_asr_ready = false;
 static char s_asr_buf[96];
 
+/* 心跳应答信箱：收到 PING 就置位，由定时器回 PONG。
+ * ⚠️ 为什么不在中断里直接回：9600 波特率发 9 个字节要 9ms，
+ *    放在中断里会长时间阻塞，可能拖垮 FreeRTOS 的节拍。 */
+static volatile bool s_pong_pending = false;
+
 /* ── 发送侧 ───────────────────────────────────────────── */
 static uint8_t    s_req_id  = 0;
 static ui_icon_t  s_pending = UI_ICON_MUSIC;   /* 正在等回执的意图 */
@@ -236,8 +241,14 @@ static void link_parse_line(char *line)
         return;
     }
 
-    if (strncmp(line, "OV+EV=ASR,", 10) == 0) {
-        const char *p = line + 10;
+    /* 心跳：网关每 20 秒发一次 OV+PING，必须回 PONG。
+     * ⚠️ 以前这里漏了这条，网关每 60 秒就判一次"掉线"并清空去重表。 */
+    if (strncmp(line, "OV+PING", 7) == 0) {
+        s_pong_pending = true;         /* 实际发送交给定时器，中断里不阻塞 */
+        return;
+    }
+
+    if (strncmp(line, "OV+EV=ASR,", 10) == 0) {        const char *p = line + 10;
         size_t i = 0;
         while (p[i] != '\0' && i < sizeof(s_asr_buf) - 1) {
             s_asr_buf[i] = p[i];
@@ -345,6 +356,12 @@ static void link_poll_timer(lv_timer_t *t)
         s_ar_ready = false;
         ui_main_set_result(s_pending, s_ar_ok);
         ui_history_mark_last(s_ar_ok);   /* 历史里那条的结果 */
+    }
+
+    /* ④ 收到过 PING → 在这里回 PONG（两路都发，谁连着网关谁收到） */
+    if (s_pong_pending) {
+        s_pong_pending = false;
+        link_send_frame("OV+PONG\r\n", 9);
     }
 }
 

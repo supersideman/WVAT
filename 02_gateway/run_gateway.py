@@ -70,31 +70,50 @@ def find_ch340() -> str:
     return ""
 
 
-def find_bt_port() -> str:
-    """找蓝牙 SPP 串口。
+def list_bt_ports():
+    """列出所有蓝牙 SPP 串口。
 
-    HC-05 在 Windows 里配对成功后，会出现**两个** COM 口（一个出方向、一个入方向），
-    设备管理器里都叫「标准串行 over 蓝牙链接 / Standard Serial over Bluetooth link」。
-    哪个能用取决于模块和驱动，所以这里把所有蓝牙口都列出来，
-    自动挑第一个；不行就手动指定（run_gateway.py COM7 bt）。
+    HC-05 配对成功后 Windows 会建**两个** COM 口（一"传出"一"传入"），
+    只有一个能真正收发。哪个对不能靠猜，所以下面用 PING 探测。
     """
     try:
         from serial.tools import list_ports
     except ImportError:
-        return ""
+        return []
     cands = []
     for p in list_ports.comports():
         hwid = (p.hwid or "").upper()
         desc = (p.description or "")
         if "BTHENUM" in hwid or "BLUETOOTH" in desc.upper() or "蓝牙" in desc:
             cands.append((p.device, desc))
-    if cands:
-        print("[launcher] 发现蓝牙串口：")
-        for dev, desc in cands:
-            print(f"           {dev}  {desc}")
-        print(f"[launcher] 自动选用 {cands[0][0]}（不行就手动指定另一个）")
-        return cands[0][0]
-    return ""
+    return cands
+
+
+def probe_bt_port(port: str, timeout: float = 2.5) -> bool:
+    """往这个口发一条 OV+PING，看有没有 OV+PONG 回来。
+
+    固件那边收到 PING 会回 PONG（user_link.c 的 s_pong_pending），
+    所以"有回应"就等于"这个口能真正收发"。这是判断两个蓝牙口哪个对的
+    最可靠办法，比挨个试快得多。
+    """
+    import time
+
+    try:
+        import serial
+    except ImportError:
+        return False
+    try:
+        with serial.Serial(port, 9600, timeout=0.2) as sp:
+            sp.reset_input_buffer()
+            sp.write(b"OV+PING\r\n")
+            t0 = time.time()
+            while time.time() - t0 < timeout:
+                line = sp.readline()
+                if b"OV+PONG" in line:
+                    return True
+    except Exception:
+        return False
+    return False
 
 
 if not port:
@@ -104,11 +123,25 @@ if not port:
         wait_sec = 20
         print(f"[launcher] 正在查找蓝牙串口（最多 {wait_sec} 秒）…")
         deadline = time.time() + wait_sec
-        while time.time() < deadline and not port:
-            port = find_bt_port()
-            if port:
+        cands = []
+        while time.time() < deadline and not cands:
+            cands = list_bt_ports()
+            if cands:
                 break
             time.sleep(0.5)
+
+        if cands:
+            print("[launcher] 发现蓝牙串口，逐个探测（每个 2.5 秒）：")
+            for dev, desc in cands:
+                ok = probe_bt_port(dev)
+                print(f"           {dev}  {'✅ 有回应' if ok else '✗ 无回应'}   {desc}")
+                if ok:
+                    port = dev
+                    break
+            if not port:
+                port = cands[0][0]
+                print("[launcher] ⚠️ 没有口回应 PING，先按第一个试")
+                print("[launcher]    若按钮点了网关没反应 → 确认模块 TXD→PA3、RXD→PA2（交叉）")
     else:
         # 等板子插上：CH340 有时"设备枚举成功但没生成 COM 口"，拔插一次即恢复。
         # 所以这里给 30 秒窗口，而不是立刻退出——插线顺序就不讲究了。

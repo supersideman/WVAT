@@ -334,7 +334,7 @@ void mic_boot_selftest(void)
 #if MIC_SELFTEST_ON_BOOT
     /* 固件版本戳：先打印，再探测。任何时候都能一眼确认烧进去的是哪一版——
      * 之前有过改了代码没重编、F8 把旧固件烧进去，对着旧行为查了半天接线。 */
-    mic_print("[mic] fw=v12 means\r\n");
+    mic_print("[mic] fw=v13 stackfix\r\n");
 
     /* 引脚身份自测：把待查那根线的模块端插到 2×9 上排第 2 孔（PB2）后复位，
      * 串口会打印 pinid 那一行，指出这根线到底焊在哪个脚上。 */
@@ -343,34 +343,39 @@ void mic_boot_selftest(void)
 
     if (!mic_init()) return;
 
-    char line[80];
+    /* ⚠️ 下面这些缓冲必须放【静态区】，绝不能放栈上。
+     *
+     * 本函数运行在 LvHandlerTask 里，那个任务的栈只有 3072 字节
+     * （见 User/Tasks/Src/user_TasksInit.c）。而 flip_cnt[4][32] 一个就占
+     * 512 字节，加上 sum_* 与几个数组、再加上 line/bits/bar，合计约 830 字节，
+     * 曾经直接把栈撑爆 → UI 任务的数据被踩 → 现象是"锁屏只画出背景、
+     * 时钟日期全没有、触摸完全失灵"。改成 static 后栈占用几乎归零。
+     */
+    static uint32_t q_peak[4];
+    static uint32_t flip_cnt[4][32];
+    static uint32_t flip_prev[4];
+    static uint32_t q_flip[4];
+    static uint64_t sum_m16[4];
+    static uint64_t sum_m8[4];
+    static uint64_t sum_m0[4];
+    static uint32_t nq[4];
+    static int      flip_ready;
+    static char     line[120];
+
+    /* 每次进函数先清零，保证可重复调用 */
+    for (int a = 0; a < 4; a++) {
+        q_peak[a] = 0; flip_prev[a] = 0; q_flip[a] = 0;
+        sum_m16[a] = 0; sum_m8[a] = 0; sum_m0[a] = 0; nq[a] = 0;
+        for (int b = 0; b < 32; b++) flip_cnt[a][b] = 0;
+    }
+    flip_ready = 0;
+
     snprintf(line, sizeof(line), "[mic] 引脚组合：%s\r\n", mic_active_pinset());
     mic_print(line);
     mic_print("[mic] 自检开始，采 1 秒，请随便说句话\r\n");
     mic_print("[mic] lvl: ");
 
     uint32_t peak_l = 0, peak_r = 0;
-    /* 把 1 秒切成 4 段，分别记峰值。
-     * 用法：前半秒别出声、后半秒大声喊 —— 若 Q2/Q3 明显大于 Q0/Q1，
-     * 说明音频链路是通的（只是取位不对）；若四段一样，说明没拿到真实音频。 */
-    uint32_t q_peak[4] = {0, 0, 0, 0};
-    /* 逐位翻转统计：flip_cnt[字序%4][bit] 记录该位翻转了多少次 */
-    uint32_t flip_cnt[4][32];
-    uint32_t flip_prev[4] = {0, 0, 0, 0};
-    uint32_t q_flip[4] = {0, 0, 0, 0};   /* 每 1/4 秒的总翻转数 */
-    /* 按三种"位偏移"分别累计幅度平均值，找出真正承载音频的那一种：
-     *   m16 = word >> 16      （数据在时隙高位）
-     *   m8  = (word >> 8) & 0xFFFF（数据整体偏移 8 位）
-     *   m0  = word & 0xFFFF   （数据在低位）
-     * 只累加绝对值，噪音（高阻位）在均值里影响小，音量变化能反映出来。 */
-    uint64_t sum_m16[4] = {0, 0, 0, 0};
-    uint64_t sum_m8[4]  = {0, 0, 0, 0};
-    uint64_t sum_m0[4]  = {0, 0, 0, 0};
-    uint32_t nq[4] = {0, 0, 0, 0};
-    int      flip_ready = 0;
-    for (int a = 0; a < 4; a++) {
-        for (int b = 0; b < 32; b++) flip_cnt[a][b] = 0;
-    }
     uint32_t pk_hi = 0;               /* 高 16 位峰值 */
     uint32_t pk_lo = 0;               /* 低 16 位峰值 */
     uint64_t sum_l2 = 0, sum_r2 = 0;
