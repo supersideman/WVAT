@@ -62,3 +62,6 @@ _tmp_*
 temp_*/
 shots/
 _m.txt
+
+# Keil 的每机器状态（窗口布局、断点、调试选项）——每次编译都会变，不入库
+01_firmware/keil/**/*.uvoptx
