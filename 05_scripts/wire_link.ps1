@@ -130,3 +130,21 @@ Write-Output "`n=== ui_init 现在长这样 ==="
 
 Write-Output "`n=== 工程里我们的 .c ==="
 Select-String -Path $uv -Pattern "user_clock\.c|ui_stage\.c|ui_lock\.c|ui_drawer\.c|user_link\.c|ui_icons\.c|ui_main\.c" | ForEach-Object { "  " + $_.Line.Trim() }
+
+# ── 5. 编码自检（防呆）─────────────────────────────────────
+# 踩过的坑：批量补 UTF-8 BOM 时对已带 BOM 的文件又写了一次，
+# 文件开头变成 EF BB BF EF BB BF，ARMCC 读到第二个 BOM 就在第 1 行
+# 报 "#7: unrecognized token"，然后所有包含它的文件连锁报错（一次 64 个）。
+Write-Output "`n=== 源文件编码自检 ==="
+$probs = 0
+Get-ChildItem "$src\*" -File -Include *.c,*.h | ForEach-Object {
+    $b = [System.IO.File]::ReadAllBytes($_.FullName)
+    $n = 0
+    while ($n + 2 -lt $b.Length -and $b[$n] -eq 0xEF -and $b[$n+1] -eq 0xBB -and $b[$n+2] -eq 0xBF) { $n += 3 }
+    if ($n -ne 3) {
+        Write-Output ("  " + $_.Name + "  BOM 数量=" + ($n / 3) + "（应为 1）")
+        $probs++
+    }
+}
+if ($probs -eq 0) { Write-Output "  OK：全部 .c/.h 都是单个 UTF-8 BOM" }
+else { Write-Output "  警告：上面这些文件 BOM 异常，编译会报 unrecognized token" }
