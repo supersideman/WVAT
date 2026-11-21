@@ -39,8 +39,8 @@ static bool s_time_set = false;
 static char s_time_str[8] = "--:--";
 static char s_date_str[8] = "--/--";
 static char s_day_str[4]  = "--";
-static char s_ym_str[10]  = "----/--";
-static char s_wd_str[4]   = "---";
+static char s_ym_str[16]  = "----年--月";
+static char s_wd_str[12]  = "---";
 
 /* ───────────────── 小工具 ───────────────── */
 
@@ -228,7 +228,7 @@ static void clock_refresh_cache(void)
         snprintf(s_time_str, sizeof(s_time_str), "--:--");
         snprintf(s_date_str, sizeof(s_date_str), "--/--");
         snprintf(s_day_str,  sizeof(s_day_str),  "--");
-        snprintf(s_ym_str,   sizeof(s_ym_str),   "----/--");
+        snprintf(s_ym_str,   sizeof(s_ym_str),   "----年--月");
         snprintf(s_wd_str,   sizeof(s_wd_str),   "---");
         return;
     }
@@ -249,10 +249,10 @@ static void clock_refresh_cache(void)
     snprintf(s_date_str, sizeof(s_date_str), "%02u/%02u", mon, day);
 
     /* 日期页用：大"日"、年/月、英文星期 */
-    static const char *const k_wd[7] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+    static const char *const k_wd[7] = {"星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"};
     int yyyy = 2000 + (int)yr;
     snprintf(s_day_str, sizeof(s_day_str), "%02u", day);
-    snprintf(s_ym_str,  sizeof(s_ym_str),  "%04d/%02u", yyyy, mon);
+    snprintf(s_ym_str,  sizeof(s_ym_str),  "%d年%d月", yyyy, (int)mon);
     if (mon >= 1u && mon <= 12u && day >= 1u && day <= 31u) {
         snprintf(s_wd_str, sizeof(s_wd_str), "%s", k_wd[weekday_from_date(yyyy, mon, day)]);
     } else {

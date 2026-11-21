@@ -24,6 +24,8 @@
 #include "ui_stage.h"
 #include "ui_theme.h"
 
+LV_FONT_DECLARE(lv_font_cn_14);   /* 年/月、星期、天气文字用中文字库 */
+
 #define COL(c) lv_color_hex(c)
 
 /* 页面内布局（240×280）*/
@@ -52,6 +54,7 @@ static lv_obj_t *s_wx_temp  = NULL;   /* 温度数字 */
 static lv_obj_t *s_wx_deg   = NULL;   /* 温度右上角的小圆圈（℃ 的度）*/
 static int       s_wx_kind  = -1;     /* -1 = 还没有数据 */
 static int       s_wx_temp_c = 0;
+static lv_obj_t *s_wx_word  = NULL;   /* 天气文字：晴 / 多云 / 雨 / 雪 */
 
 /* ───────────────── 工具 ───────────────── */
 
@@ -163,6 +166,16 @@ static void repaint_weather(void)
         if (has) lv_obj_clear_flag(s_wx_deg, LV_OBJ_FLAG_HIDDEN);
         else     lv_obj_add_flag(s_wx_deg, LV_OBJ_FLAG_HIDDEN);
     }
+    if (s_wx_word) {
+        static const char *const k_word[4] = {"晴", "多云", "雨", "雪"};
+        if (has) {
+            lv_label_set_text(s_wx_word, k_word[(s_wx_kind >= 0 && s_wx_kind <= 3) ? s_wx_kind : 0]);
+            lv_obj_clear_flag(s_wx_word, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_label_set_text(s_wx_word, "");
+            lv_obj_add_flag(s_wx_word, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 /* ───────────────── 手势 ───────────────── */
@@ -216,9 +229,9 @@ static void build(void)
     lv_obj_set_style_bg_opa(s_scr, LV_OPA_COVER, 0);
     lv_obj_clear_flag(s_scr, LV_OBJ_FLAG_SCROLLABLE);
 
-    s_lbl_ym  = dlabel(s_scr, D_YM_Y,  18, UI_FONT_NUM14, UI_C_DIM,    "----/--");
-    s_lbl_day = dlabel(s_scr, D_DAY_Y, 56, UI_FONT_NUM44, UI_C_TEXT,   "--");
-    s_lbl_wd  = dlabel(s_scr, D_WD_Y,  18, UI_FONT_NUM14, UI_C_ACCENT, "---");
+    s_lbl_ym  = dlabel(s_scr, D_YM_Y,  18, &lv_font_cn_14, UI_C_DIM,    "----年--月");
+    s_lbl_day = dlabel(s_scr, D_DAY_Y, 56, UI_FONT_NUM44,  UI_C_TEXT,   "--");
+    s_lbl_wd  = dlabel(s_scr, D_WD_Y,  18, &lv_font_cn_14, UI_C_ACCENT, "---");
 
     /* 天气区：**直接画在页面背景上**（不要卡片底色，跟日期/星期一样浮在背景上）*/
     s_ph_card = dbox(s_scr, D_PH_X, D_PH_Y, D_PH_W, D_PH_H, 0,
@@ -247,6 +260,15 @@ static void build(void)
     lv_label_set_text(s_wx_temp, "");
 
     s_wx_deg = dbox(s_ph_card, 186, 16, 7, 7, 3, UI_C_TEXT, LV_OPA_COVER);
+
+    /* 天气文字：晴 / 多云 / 雨 / 雪（14px 中文字库，居中在温度下方）*/
+    s_wx_word = lv_label_create(s_ph_card);
+    lv_obj_set_pos(s_wx_word, 0, 60);
+    lv_obj_set_width(s_wx_word, D_PH_W);
+    lv_obj_set_style_text_font(s_wx_word, &lv_font_cn_14, 0);
+    lv_obj_set_style_text_color(s_wx_word, COL(UI_C_DIM), 0);
+    lv_obj_set_style_text_align(s_wx_word, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(s_wx_word, "");
 
     /* 底部页面条：三个圆点（本页在最左）+ 右侧 ">" */
     lv_obj_t *bar = dbox(s_scr, 0, UI_PAGEBAR_Y, UI_W, UI_PAGEBAR_H, 0,
