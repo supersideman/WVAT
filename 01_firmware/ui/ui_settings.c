@@ -28,6 +28,8 @@
 #include "user_backlight.h"
 #include "user_link.h"
 
+LV_FONT_DECLARE(lv_font_cn_14);   /* 标签全是中文，统一用这个字库 */
+
 #define COL(c) lv_color_hex(c)
 
 #define BRI_LEVELS       5
@@ -72,7 +74,7 @@ static lv_obj_t *slabel(lv_obj_t *parent, int x, int y, int w, uint32_t color,
     lv_obj_t *l = lv_label_create(parent);
     lv_obj_set_pos(l, x, y);
     lv_obj_set_width(l, w);
-    lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(l, &lv_font_cn_14, 0);
     lv_obj_set_style_text_color(l, COL(color), 0);
     lv_obj_set_style_text_align(l, align, 0);
     lv_label_set_text(l, txt);
@@ -92,7 +94,7 @@ static lv_obj_t *row(lv_obj_t *parent, int idx, const char *tag)
     int y = UI_SET_ROW_Y0 + idx * UI_SET_ROW_STEP;
     lv_obj_t *card = sbox(parent, UI_SET_ROW_X, y, UI_SET_ROW_W, UI_SET_ROW_H,
                           10, UI_C_CARD, LV_OPA_COVER);
-    slabel(card, 12, (UI_SET_ROW_H - 16) / 2, 60, UI_C_DIM,
+    slabel(card, 12, (UI_SET_ROW_H - 16) / 2, 76, UI_C_DIM,
            LV_TEXT_ALIGN_LEFT, tag);
     return card;
 }
@@ -113,7 +115,7 @@ static void refresh_bt(void)
 {
     if (!s_lbl_bt) return;
     bool on = link_bt_is_enabled();
-    lv_label_set_text(s_lbl_bt, on ? "ON" : "OFF");
+    lv_label_set_text(s_lbl_bt, on ? "开" : "关");
     lv_obj_set_style_text_color(s_lbl_bt, COL(on ? UI_C_ACCENT : UI_C_DIM), 0);
 }
 
@@ -121,10 +123,10 @@ static void refresh_link(void)
 {
     if (!s_lbl_link) return;
     int kind = link_active_kind();          /* 0=无 1=USB 2=蓝牙 */
-    const char *txt = "-";
+    const char *txt = "无";
     uint32_t    col = UI_C_DIM;
-    if (kind == 1) { txt = "U"; col = UI_C_ACCENT; }
-    else if (kind == 2) { txt = "B"; col = UI_C_INFO; }
+    if (kind == 1) { txt = "USB";  col = UI_C_ACCENT; }
+    else if (kind == 2) { txt = "蓝牙"; col = UI_C_INFO; }
     lv_label_set_text(s_lbl_link, txt);
     lv_obj_set_style_text_color(s_lbl_link, COL(col), 0);
 }
@@ -134,7 +136,7 @@ static void refresh_all(void)
     refresh_brightness();
     refresh_bt();
     refresh_link();
-    if (s_lbl_clr) lv_label_set_text(s_lbl_clr, "TAP");
+    if (s_lbl_clr) lv_label_set_text(s_lbl_clr, "清空");
     if (s_lbl_ver) lv_label_set_text(s_lbl_ver, "v" OV_FW_VERSION);
 }
 
@@ -159,7 +161,7 @@ static void clr_timer_cb(lv_timer_t *t)
 {
     (void)t;
     s_clr_timer = NULL;                   /* repeat_count=1，LVGL 自己会删 */
-    if (s_lbl_clr) lv_label_set_text(s_lbl_clr, "TAP");
+    if (s_lbl_clr) lv_label_set_text(s_lbl_clr, "清空");
 }
 
 static void on_clr_clicked(lv_event_t *e)
@@ -167,7 +169,7 @@ static void on_clr_clicked(lv_event_t *e)
     (void)e;
     ui_history_clear();
     if (s_lbl_clr) {
-        lv_label_set_text(s_lbl_clr, "DONE");
+        lv_label_set_text(s_lbl_clr, "已清空");
         lv_obj_set_style_text_color(s_lbl_clr, COL(UI_C_ACCENT), 0);
     }
     if (s_clr_timer) lv_timer_del(s_clr_timer);
@@ -235,10 +237,10 @@ static void build(void)
                  UI_SET_BACK_SIZE - 2, UI_C_TEXT);
     pressable(back, on_back_clicked);
 
-    slabel(s_scr, 0, 8, UI_W, UI_C_TEXT, LV_TEXT_ALIGN_CENTER, "SETTINGS");
+    slabel(s_scr, 0, 8, UI_W, UI_C_TEXT, LV_TEXT_ALIGN_CENTER, "设置");
 
     /* 行 0：亮度 */
-    lv_obj_t *r0 = row(s_scr, 0, "BRI");
+    lv_obj_t *r0 = row(s_scr, 0, "亮度");
     for (int i = 0; i < BRI_LEVELS; i++) {
         int sx = UI_SET_ROW_W - 12 - BRI_SEG_GROUP_W + i * (BRI_SEG_W + BRI_SEG_GAP);
         s_seg[i] = sbox(r0, sx, (UI_SET_ROW_H - BRI_SEG_H) / 2,
@@ -247,24 +249,24 @@ static void build(void)
     pressable(r0, on_bri_clicked);
 
     /* 行 1：蓝牙开关 */
-    lv_obj_t *r1 = row(s_scr, 1, "BT");
+    lv_obj_t *r1 = row(s_scr, 1, "蓝牙");
     s_lbl_bt = slabel(r1, UI_SET_ROW_W - 12 - 60, (UI_SET_ROW_H - 16) / 2, 60,
-                      UI_C_DIM, LV_TEXT_ALIGN_RIGHT, "OFF");
+                      UI_C_DIM, LV_TEXT_ALIGN_RIGHT, "关");
     pressable(r1, on_bt_clicked);
 
     /* 行 2：当前链路（只读）*/
-    lv_obj_t *r2 = row(s_scr, 2, "LINK");
+    lv_obj_t *r2 = row(s_scr, 2, "链路");
     s_lbl_link = slabel(r2, UI_SET_ROW_W - 12 - 60, (UI_SET_ROW_H - 16) / 2, 60,
-                        UI_C_DIM, LV_TEXT_ALIGN_RIGHT, "-");
+                        UI_C_DIM, LV_TEXT_ALIGN_RIGHT, "无");
 
     /* 行 3：清空历史 */
-    lv_obj_t *r3 = row(s_scr, 3, "CLR");
+    lv_obj_t *r3 = row(s_scr, 3, "清历史");
     s_lbl_clr = slabel(r3, UI_SET_ROW_W - 12 - 60, (UI_SET_ROW_H - 16) / 2, 60,
-                       UI_C_DIM, LV_TEXT_ALIGN_RIGHT, "TAP");
+                       UI_C_DIM, LV_TEXT_ALIGN_RIGHT, "清空");
     pressable(r3, on_clr_clicked);
 
     /* 行 4：版本（只读）*/
-    lv_obj_t *r4 = row(s_scr, 4, "VER");
+    lv_obj_t *r4 = row(s_scr, 4, "版本");
     s_lbl_ver = slabel(r4, UI_SET_ROW_W - 12 - 90, (UI_SET_ROW_H - 16) / 2, 90,
                        UI_C_TEXT, LV_TEXT_ALIGN_RIGHT, "v" OV_FW_VERSION);
 
