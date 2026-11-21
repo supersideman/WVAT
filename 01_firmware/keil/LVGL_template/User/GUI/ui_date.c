@@ -220,9 +220,9 @@ static void build(void)
     s_lbl_day = dlabel(s_scr, D_DAY_Y, 56, UI_FONT_NUM44, UI_C_TEXT,   "--");
     s_lbl_wd  = dlabel(s_scr, D_WD_Y,  18, UI_FONT_NUM14, UI_C_ACCENT, "---");
 
-    /* 天气卡片：有数据时"图标 + 温度"，没有数据时显示一个淡淡的"＋" */
-    s_ph_card = dbox(s_scr, D_PH_X, D_PH_Y, D_PH_W, D_PH_H, D_PH_R,
-                     UI_C_CARD, LV_OPA_COVER);
+    /* 天气区：**直接画在页面背景上**（不要卡片底色，跟日期/星期一样浮在背景上）*/
+    s_ph_card = dbox(s_scr, D_PH_X, D_PH_Y, D_PH_W, D_PH_H, 0,
+                     UI_C_BG, LV_OPA_TRANSP);
 
     /* 没有天气数据时：卡片中央一个淡色 "--"（和时钟的 "--:--" 一个风格）*/
     s_wx_none = lv_label_create(s_ph_card);
