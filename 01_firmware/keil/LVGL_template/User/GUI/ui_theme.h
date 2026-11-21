@@ -121,6 +121,11 @@
 #define UI_PAGEDOT_SZ     6
 #define UI_PAGEDOT_GAP    10
 
+/* 翻页滑动阈值：横向位移超过这么多像素才算"要翻页"（防误触）。
+   实测 30px 在 240 宽的屏上大约是全屏的 1/8，既能轻松触发，
+   又不会把"想点一下时钟"当成翻页。 */
+#define UI_PAGE_SWIPE_PX  30
+
 /* ── 锁屏页 ───────────────────────────────────────────── */
 #define UI_LOCK_TIME_Y   96    /* 大时钟文字顶边 */
 #define UI_LOCK_DATE_Y   152

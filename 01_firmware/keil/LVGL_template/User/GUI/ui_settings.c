@@ -182,6 +182,40 @@ static void on_back_clicked(lv_event_t *e)
     ui_settings_close();
 }
 
+/* 整层背景向右滑 → 返回主界面（与主界面"向左滑进设置"对称）。
+   和主界面同一套思路：标签不可点，落到背景上的触点由这一层收；
+   落在行卡片/返回键上的触点先被它们拿走，不会误翻页。 */
+static int s_press_x = -1;
+
+static void on_scr_pressed(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_PRESSED) return;
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_point_t p;
+    lv_indev_get_point(indev, &p);
+    s_press_x = p.x;
+}
+
+static void on_scr_released(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_RELEASED) return;
+    if (s_press_x < 0) return;
+
+    int dx = 0;
+    lv_indev_t *indev = lv_indev_get_act();
+    if (indev) {
+        lv_point_t p;
+        lv_indev_get_point(indev, &p);
+        dx = p.x - s_press_x;
+    }
+    s_press_x = -1;
+
+    if (dx >= UI_PAGE_SWIPE_PX) {          /* 向右滑 → 回主界面 */
+        ui_settings_close();
+    }
+}
+
 /* ───────────────── 构建 ───────────────── */
 
 static void build(void)
@@ -248,6 +282,11 @@ static void build(void)
          (UI_PAGEBAR_H - UI_PAGEDOT_SZ) / 2, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ,
          UI_PAGEDOT_SZ / 2, UI_C_ACCENT, LV_OPA_COVER);
     pressable(bar, on_back_clicked);
+
+    /* 整层背景：向右滑返回（放最后，只兜住没被行卡片接走的触点）*/
+    lv_obj_add_flag(s_scr, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_scr, on_scr_pressed,  LV_EVENT_PRESSED,  NULL);
+    lv_obj_add_event_cb(s_scr, on_scr_released, LV_EVENT_RELEASED, NULL);
 }
 
 /* ───────────────── 对外接口 ───────────────── */

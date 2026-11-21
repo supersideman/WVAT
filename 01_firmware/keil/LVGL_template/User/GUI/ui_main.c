@@ -122,17 +122,53 @@ static void on_talk_clicked(lv_event_t *e)
 
 /**
  * 底部页面条：点击或左右滑动都进设置页。
- *
- * 为什么不把滑动检测挂在整个主界面上：
- *   主界面上全是可点的意图格/按钮，若在父对象上收 PRESSING/RELEASED，
- *   滑过格子时会连带触发格子的 CLICKED（LVGL 的点击判定不看拖动距离），
- *   结果是"想翻页却把歌暂停了"。底部 26px 是唯一没有按钮的空白带，
- *   把翻页手势放这里，零冲突、也不用递归给子控件加事件冒泡。
  */
 static void on_pagebar_released(lv_event_t *e)
 {
     (void)e;
     ui_settings_open();
+}
+
+/* ── 整层背景的横向翻页 ──
+ *
+ * 为什么挂在"主界面这一层的父对象"上而不是每个控件上：
+ *   时钟、日期、链路指示这些标签**不可点击**，手指落在它们上面时，
+ *   LVGL 的命中测试会继续往上找，最终落到这一层 → 我们收到了事件。
+ *   而落在意图格/回执条/麦克风按钮上时，那些控件自己是可点的，
+ *   事件先被它们拿走，所以本层收不到 → **滑过按钮不会误翻页**。
+ *
+ * 也就是说：这一层天然就是"所有空白区域"的合并区（含整个时钟区），
+ * 比原来那条 26px 的底部窄条好按得多，又不需要给子控件加事件冒泡。
+ */
+static int s_press_x = -1;
+
+static void on_bg_pressed(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_PRESSED) return;
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_point_t p;
+    lv_indev_get_point(indev, &p);
+    s_press_x = p.x;
+}
+
+static void on_bg_released(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_RELEASED) return;
+    if (s_press_x < 0) return;
+
+    int dx = 0;
+    lv_indev_t *indev = lv_indev_get_act();
+    if (indev) {
+        lv_point_t p;
+        lv_indev_get_point(indev, &p);
+        dx = p.x - s_press_x;
+    }
+    s_press_x = -1;
+
+    if (dx <= -UI_PAGE_SWIPE_PX) {          /* 向左滑 → 下一页（设置） */
+        ui_settings_open();
+    }
 }
 
 /** 一个意图格：66×66 圆角卡片 + 居中图标（可点、有按下反馈） */
@@ -258,6 +294,12 @@ void ui_main_build(lv_obj_t *parent)
     }
     lv_obj_add_flag(pbar, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(pbar, on_pagebar_released, LV_EVENT_RELEASED, NULL);
+
+    /* 整层背景也能横向翻页（覆盖时钟/日期/空白区，见上面 on_bg_* 的说明）。
+       必须放在最后：让这一层的可点性只兜住"没被任何子控件接走"的触点。 */
+    lv_obj_add_flag(parent, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(parent, on_bg_pressed,  LV_EVENT_PRESSED,  NULL);
+    lv_obj_add_event_cb(parent, on_bg_released, LV_EVENT_RELEASED, NULL);
 }
 
 /** 独立屏幕版本（一般不用了：开机走 ui_stage）*/
