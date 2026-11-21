@@ -1,4 +1,4 @@
-﻿package com.wvat.go
+package com.wvat.go
 
 import android.Manifest
 import android.app.Activity
@@ -18,10 +18,10 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 /**
- * 主界面：连接状态 + 日志 + 两个按钮。
+ * 主界面：只做"显示 + 操作入口"，真正的网关在 [Gateway] 单例里跑。
  *
- * 刻意不引入任何 UI 框架（不用 Compose / AppCompat），
- * 全部用系统控件代码构建——构建快、出错点少。
+ * 这样设计的结果：转后台、锁屏、Activity 被回收，网关都不受影响；
+ * 再回到 App 时把日志观察者重新挂上就能接着看。
  */
 class MainActivity : Activity() {
 
@@ -29,41 +29,28 @@ class MainActivity : Activity() {
     private lateinit var logView: TextView
     private lateinit var connectBtn: Button
 
-    private lateinit var link: BtLink
-    private lateinit var gateway: GatewayCore
-    private lateinit var actions: Actions
-
     private val logLines = ArrayDeque<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        actions = Actions(this)
-
-        link = BtLink(
-            onLine = { line -> gateway.onLine(line) },
-            onState = { st ->
-                runOnUiThread {
-                    statusView.text = st
-                    appendLog(st)
-                    updateConnectButton()
-                    when {
-                        // 链路真的通了才启动网关：否则第一帧授时会发进空气里
-                        st.startsWith("已连接") -> gateway.start()
-                        st.startsWith("链路断开") || st.startsWith("连接失败") -> gateway.stop()
-                    }
-                }
-            },
-        )
-
-        gateway = GatewayCore(
-            send = { frame -> link.send(frame) },
-            actions = actions,
-            log = { msg -> runOnUiThread { appendLog(msg) } },
-        )
-
         setContentView(buildUi())
-        requestBtPermissions()
+        requestPermissionsIfNeeded()
     }
+
+    override fun onStart() {
+        super.onStart()
+        // 重新挂上日志观察者（切换回 App 时能看到之前的状态）
+        Gateway.logListener = { msg -> appendLog(msg) }
+        statusView.text = Gateway.state
+        updateConnectButton()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        Gateway.logListener = null      // 界面不在前台就别再往它上面推了
+    }
+
+    // ───────────────── UI ─────────────────
 
     private fun buildUi(): ViewGroup {
         val root = LinearLayout(this).apply {
@@ -77,7 +64,7 @@ class MainActivity : Activity() {
         })
 
         root.addView(TextView(this).apply {
-            text = "把手表通过蓝牙连到这台手机，它就是原来的那台电脑。"
+            text = "手表通过蓝牙连这台手机；转后台后由前台服务保活。"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setPadding(0, dp(4), 0, dp(12))
         })
@@ -99,7 +86,7 @@ class MainActivity : Activity() {
             text = "推天气"
             setOnClickListener {
                 appendLog("手动触发天气：${Weather.city}")
-                gateway.forceWeather()
+                Gateway.forceWeather()
             }
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
@@ -107,14 +94,13 @@ class MainActivity : Activity() {
         btnRow.addView(wxBtn)
         root.addView(btnRow)
 
-        val clearBtn = Button(this).apply {
+        root.addView(Button(this).apply {
             text = "清空日志"
             setOnClickListener {
                 logLines.clear()
                 logView.text = ""
             }
-        }
-        root.addView(clearBtn)
+        })
 
         logView = TextView(this).apply {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
@@ -122,41 +108,44 @@ class MainActivity : Activity() {
             gravity = Gravity.START
             movementMethod = ScrollingMovementMethod()
         }
-        val scroll = ScrollView(this).apply {
+        root.addView(ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
             )
             addView(logView)
-        }
-        root.addView(scroll)
+        })
 
         return root
     }
 
-    // ── 日志 ──────────────────────────────────────────────
     private fun appendLog(msg: String) {
-        // 同时打到系统日志：`adb logcat -s WVAT` 就能远程看到，
-        // 不用每次都截图界面（我自己也是这么排错的）
-        android.util.Log.i("WVAT", msg)
         logLines.addLast(msg)
         while (logLines.size > 200) logLines.removeFirst()
         logView.text = logLines.joinToString("\n")
+        statusView.text = Gateway.state
+        updateConnectButton()
     }
 
-    private fun dp(v: Int): Int =
-        (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    // ── 选设备 ────────────────────────────────────────────
+    private fun updateConnectButton() {
+        connectBtn.text = if (Gateway.isConnected()) "断开" else "连接手表"
+    }
+
+    // ───────────────── 选设备 ─────────────────
+
     private fun chooseDevice() {
-        if (link.isConnected) {
-            gateway.stop()
-            link.disconnect()
+        if (Gateway.isConnected()) {
+            Gateway.disconnect()
+            GatewayService.stop(this)
+            appendLog("已手动断开")
             updateConnectButton()
             return
         }
+
         val adapter = BluetoothAdapter.getDefaultAdapter()
         if (adapter == null) {
-            appendLog("这台手机没有蓝牙")
+            appendLog("这台设备没有蓝牙")
             return
         }
         if (!adapter.isEnabled) {
@@ -166,7 +155,7 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 31 &&
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
         ) {
-            requestBtPermissions()
+            requestPermissionsIfNeeded()
             appendLog("请先授予蓝牙权限，再点一次连接")
             return
         }
@@ -176,25 +165,23 @@ class MainActivity : Activity() {
             appendLog("没有已配对的设备：先在系统设置里配对 HC-05")
             return
         }
+
         val names = devices.map { "${it.name ?: "(无名)"}\n${it.address}" }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle("选择已配对的蓝牙设备")
             .setItems(names) { _, which ->
                 val dev = devices[which]
                 appendLog("连接 ${dev.name ?: dev.address} …")
-                link.connect(dev)          // 连上后由 onState 启动网关
+                Gateway.connect(this, dev)   // 连上后由 Gateway 拉起前台服务
                 updateConnectButton()
             }
             .setNegativeButton("取消", null)
             .show()
     }
 
-    private fun updateConnectButton() {
-        connectBtn.text = if (link.isConnected) "断开" else "连接手表"
-    }
+    // ───────────────── 权限 ─────────────────
 
-    // ── 权限 ──────────────────────────────────────────────
-    private fun requestBtPermissions() {
+    private fun requestPermissionsIfNeeded() {
         val perms = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= 31) {
             perms += Manifest.permission.BLUETOOTH_CONNECT
@@ -203,17 +190,7 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 33) {
             perms += Manifest.permission.POST_NOTIFICATIONS
         }
-        val todo = perms.filter {
-            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (todo.isNotEmpty()) {
-            requestPermissions(todo.toTypedArray(), 1001)
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        gateway.stop()
-        link.disconnect()
+        val todo = perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (todo.isNotEmpty()) requestPermissions(todo.toTypedArray(), 1001)
     }
 }
