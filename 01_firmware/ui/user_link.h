@@ -48,6 +48,15 @@ void link_send_mic_ctrl(bool start);
 /** 图标 → 协议动作码（A01/A03/A07/A08） */
 const char *link_code_of(ui_icon_t kind);
 
+/** 开关蓝牙通道（USART2）。关掉会 DeInit 串口与引脚；重新打开会重新初始化。
+ *  设置页的 BT 行调用它——关掉能省电，排查"到底是不是蓝牙在拖后腿"时也好用。 */
+void link_bt_set_enabled(bool on);
+bool link_bt_is_enabled(void);
+
+/** 当前活跃链路：0=无 1=USB 2=蓝牙
+ *  判据是"最近 25 秒内哪一路收到过字节"（网关每 20 秒发一次 PING）。*/
+int  link_active_kind(void);
+
 #ifdef __cplusplus
 }
 #endif

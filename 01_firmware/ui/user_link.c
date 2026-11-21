@@ -96,7 +96,7 @@ static void link_send_frame(const char *buf, int n)
 }
 
 /** 初始化蓝牙通道：USART2 @ 9600，PA2=TX / PA3=RX（都是 AF7） */
-static void bt_init(void)
+static void bt_start(void)
 {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_USART2_CLK_ENABLE();
@@ -129,6 +129,46 @@ static void bt_init(void)
 
     s_bt_ready = true;
     link_dbg("[bt] USART2 ready @9600 (PA2=TX, PA3=RX)\r\n");
+}
+
+/** 关闭蓝牙通道：停中断、DeInit 串口、引脚恢复默认 */
+static void bt_stop(void)
+{
+    if (!s_bt_ready) return;
+
+    HAL_NVIC_DisableIRQ(USART2_IRQn);
+    HAL_UART_DeInit(&s_huart_bt);
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_2 | GPIO_PIN_3);
+
+    s_bt_ready = false;
+    s_bt_len   = 0;
+    s_last_bt_ms = 0;
+    link_dbg("[bt] USART2 已关闭\r\n");
+}
+
+void link_bt_set_enabled(bool on)
+{
+    if (on) bt_start();
+    else    bt_stop();
+}
+
+bool link_bt_is_enabled(void)
+{
+    return s_bt_ready;
+}
+
+int link_active_kind(void)
+{
+    uint32_t now = HAL_GetTick();
+    bool usb_ok = (s_last_usb_ms != 0) && ((now - s_last_usb_ms) < LINK_ALIVE_MS);
+    bool bt_ok  = (s_last_bt_ms  != 0) && ((now - s_last_bt_ms)  < LINK_ALIVE_MS);
+
+    if (usb_ok && bt_ok) {
+        return ((now - s_last_usb_ms) <= (now - s_last_bt_ms)) ? 1 : 2;
+    }
+    if (usb_ok) return 1;
+    if (bt_ok)  return 2;
+    return 0;
 }
 
 /* ═══════════════════════ 工具 ═══════════════════════ */
@@ -375,19 +415,12 @@ static void link_poll_timer(lv_timer_t *t)
 
     /* ⑤ 链路指示：最近 25 秒内谁收到过数据，就点亮谁
      *    U（青）= USB 在线，B（蓝）= 蓝牙在线，灰点 = 都没有
-     *    两路都活着时显示"更近"的那一路，切换不留延迟感。 */
+     *    判定逻辑统一在 link_active_kind()，避免和设置页各写一份走偏。 */
     {
-        uint32_t now = HAL_GetTick();
-        bool usb_ok = (s_last_usb_ms != 0) && ((now - s_last_usb_ms) < LINK_ALIVE_MS);
-        bool bt_ok  = (s_last_bt_ms  != 0) && ((now - s_last_bt_ms)  < LINK_ALIVE_MS);
-        ui_link_t st = UI_LINK_NONE;
-        if (usb_ok && bt_ok) {
-            st = ((now - s_last_usb_ms) <= (now - s_last_bt_ms)) ? UI_LINK_USB : UI_LINK_BT;
-        } else if (usb_ok) {
-            st = UI_LINK_USB;
-        } else if (bt_ok) {
-            st = UI_LINK_BT;
-        }
+        int kind = link_active_kind();
+        ui_link_t st = (kind == 1) ? UI_LINK_USB
+                     : (kind == 2) ? UI_LINK_BT
+                                   : UI_LINK_NONE;
         ui_main_set_link(st);        /* 状态没变时内部直接返回，代价可忽略 */
     }
 }
@@ -425,7 +458,7 @@ void link_init(void)
     HAL_UART_Receive_IT(&huart1, &s_rx_byte, 1);
 
     /* 蓝牙通道（USART2 @9600）。初始化失败也不影响 USB 那条链路 */
-    bt_init();
+    bt_start();
 
     /* 使能 USART1 中断（CubeMX 没开，我们自己开）
      * 优先级 5：不高于 configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY，

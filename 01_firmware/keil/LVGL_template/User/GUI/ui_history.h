@@ -30,6 +30,9 @@ void ui_history_mark_last(bool ok);
 void ui_history_open(void);
 void ui_history_close(void);
 
+/** 清空全部历史（设置页的 CLR 行调用）*/
+void ui_history_clear(void);
+
 /** 历史页是否可见 */
 bool ui_history_visible(void);
 

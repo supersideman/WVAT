@@ -9,6 +9,7 @@
 #include "ui_lock.h"
 #include "ui_main.h"
 #include "ui_theme.h"
+#include "user_backlight.h"
 
 /* 调试开关：把内部状态从 USART1 打出来（printf 已在 usart.c 重定向）
  * 排查阶段用 1；平时设 0——调试日志会占串口带宽，也会混进网关日志。 */
@@ -123,6 +124,10 @@ static void on_long_pressed(lv_event_t *e)
 void ui_stage_init(void)
 {
     if (s_root) return;
+
+    /* 背光调光：必须在 LCD 初始化之后（这里就是），
+       会把 lcd_init 设成 GPIO 输出的 PA15 改成 TIM2_CH1 PWM */
+    bl_init();
 
     s_root = lv_obj_create(NULL);
     lv_obj_remove_style_all(s_root);

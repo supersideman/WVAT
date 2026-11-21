@@ -673,6 +673,16 @@
               <FilePath>..\User\GUI\ui_icons.c</FilePath>
             </File>
             <File>
+              <FileName>ui_settings.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\GUI\ui_settings.c</FilePath>
+            </File>
+            <File>
+              <FileName>user_backlight.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\GUI\user_backlight.c</FilePath>
+            </File>
+            <File>
               <FileName>user_i2s.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\GUI\user_i2s.c</FilePath>

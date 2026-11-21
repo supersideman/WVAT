@@ -102,6 +102,25 @@
 #define UI_DRW_DOT_X     (UI_DRW_FB_X + UI_DRW_FB_ICON_SZ + UI_DRW_FB_GAP)
 #define UI_DRW_DOT_Y     ((UI_DRW_TOP_H - UI_DRW_DOT_SZ) / 2)
 
+/* ── 设置页 ─────────────────────────────────────────────
+   5 行 × 40 高、步长 43：36 + 4×43 + 40 = 248，正好给底部页面条留出 254 起的空白。 */
+#define UI_SET_BACK_X     10
+#define UI_SET_BACK_Y     2
+#define UI_SET_BACK_SIZE  28
+#define UI_SET_ROW_X      12
+#define UI_SET_ROW_W      (UI_W - 2 * UI_SET_ROW_X)
+#define UI_SET_ROW_H      40
+#define UI_SET_ROW_Y0     36
+#define UI_SET_ROW_STEP   43
+
+/* ── 底部页面条（主界面 / 设置页共用）──────────────────
+   主界面 254~280 是唯一的空白带，而且这条带子上没有任何按钮，
+   所以左右滑动/点击不会跟意图格抢触摸事件。 */
+#define UI_PAGEBAR_Y      254
+#define UI_PAGEBAR_H      (UI_H - UI_PAGEBAR_Y)
+#define UI_PAGEDOT_SZ     6
+#define UI_PAGEDOT_GAP    10
+
 /* ── 锁屏页 ───────────────────────────────────────────── */
 #define UI_LOCK_TIME_Y   96    /* 大时钟文字顶边 */
 #define UI_LOCK_DATE_Y   152

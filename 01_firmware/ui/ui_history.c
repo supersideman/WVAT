@@ -207,6 +207,15 @@ static void build_screen(void)
 
 /* ───────────────── 对外接口 ───────────────── */
 
+/** 清空全部历史（设置页的 CLR 行调用）。
+ *  只清计数并重绘列表——refresh_list() 里对空列表有专门的"空状态"分支，
+ *  不需要额外处理每一行对象（重建列表时会一并删掉）。 */
+void ui_history_clear(void)
+{
+    s_count = 0;
+    refresh_list();
+}
+
 void ui_history_open(void)
 {
     if (!s_scr) build_screen();

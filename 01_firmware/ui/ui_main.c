@@ -9,6 +9,7 @@
 #include "ui_theme.h"
 #include "ui_icons.h"
 #include "ui_drawer.h"
+#include "ui_settings.h"
 #include "ui_status.h"
 #include "ui_rec.h"
 #include "ui_history.h"
@@ -119,6 +120,21 @@ static void on_talk_clicked(lv_event_t *e)
     ui_rec_open();
 }
 
+/**
+ * 底部页面条：点击或左右滑动都进设置页。
+ *
+ * 为什么不把滑动检测挂在整个主界面上：
+ *   主界面上全是可点的意图格/按钮，若在父对象上收 PRESSING/RELEASED，
+ *   滑过格子时会连带触发格子的 CLICKED（LVGL 的点击判定不看拖动距离），
+ *   结果是"想翻页却把歌暂停了"。底部 26px 是唯一没有按钮的空白带，
+ *   把翻页手势放这里，零冲突、也不用递归给子控件加事件冒泡。
+ */
+static void on_pagebar_released(lv_event_t *e)
+{
+    (void)e;
+    ui_settings_open();
+}
+
 /** 一个意图格：66×66 圆角卡片 + 居中图标（可点、有按下反馈） */
 static lv_obj_t *tile(lv_obj_t *parent, int x, ui_icon_t kind, uint32_t color)
 {
@@ -224,6 +240,24 @@ void ui_main_build(lv_obj_t *parent)
     /* 按下时：底色变亮 + 描边加粗，手指能明显感到"按到了" */
     make_pressable(btn, on_talk_clicked, NULL);
     lv_obj_set_style_border_width(btn, UI_BTN_BORDER + 1, LV_STATE_PRESSED);
+
+    /* 底部页面条：两个圆点（第 1 页高亮）+ 右侧 ">" 提示。
+       点一下或左右滑动 → 进设置页（第 1/2 页的切换）。 */
+    lv_obj_t *pbar = box(s_scr, 0, UI_PAGEBAR_Y, UI_W, UI_PAGEBAR_H, 0,
+                         UI_C_BG, LV_OPA_TRANSP);
+    {
+        int cx = UI_W / 2;
+        box(pbar, cx - UI_PAGEDOT_GAP / 2 - UI_PAGEDOT_SZ,
+            (UI_PAGEBAR_H - UI_PAGEDOT_SZ) / 2, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ,
+            UI_PAGEDOT_SZ / 2, UI_C_ACCENT, LV_OPA_COVER);      /* 第 1 页：亮 */
+        box(pbar, cx + UI_PAGEDOT_GAP / 2,
+            (UI_PAGEBAR_H - UI_PAGEDOT_SZ) / 2, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ,
+            UI_PAGEDOT_SZ / 2, UI_C_DIM, LV_OPA_COVER);         /* 第 2 页：暗 */
+        num_label(pbar, UI_W - 26, (UI_PAGEBAR_H - 16) / 2, 16, UI_FONT_NUM14,
+                  UI_C_DIM, ">");
+    }
+    lv_obj_add_flag(pbar, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(pbar, on_pagebar_released, LV_EVENT_RELEASED, NULL);
 }
 
 /** 独立屏幕版本（一般不用了：开机走 ui_stage）*/
