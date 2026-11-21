@@ -148,3 +148,34 @@ Get-ChildItem "$src\*" -File -Include *.c,*.h | ForEach-Object {
 }
 if ($probs -eq 0) { Write-Output "  OK：全部 .c/.h 都是单个 UTF-8 BOM" }
 else { Write-Output "  警告：上面这些文件 BOM 异常，编译会报 unrecognized token" }
+
+# ── 6. BOM 自动修复（兜住一切"读出来再写回"的叠加）────────────
+# 任何脚本把已带 BOM 的内容用"带 BOM 的编码"再写一次，就会变成 2 个 BOM；
+# ARMCC 读到第二个 BOM 会在第 1 行报 "#7: unrecognized token"，
+# 然后所有包含该文件的源文件连锁报错（一次能报 64 个，且指不到真因）。
+# 这里直接修：多余的剥掉、缺失的补上，保证恰好 1 个。
+Write-Output "`n=== BOM 自动修复 ==="
+$fixed = 0
+Get-ChildItem "$src\*" -File -Include *.c,*.h | ForEach-Object {
+    $b = [System.IO.File]::ReadAllBytes($_.FullName)
+    $n = 0
+    while ($n + 2 -lt $b.Length -and $b[$n] -eq 0xEF -and $b[$n+1] -eq 0xBB -and $b[$n+2] -eq 0xBF) { $n += 3 }
+    if ($n -ne 3) {
+        $content = New-Object byte[] ($b.Length - $n)
+        [Array]::Copy($b, $n, $content, 0, $content.Length)
+        $o = New-Object System.Collections.Generic.List[byte]
+        $o.AddRange([System.Text.UTF8Encoding]::new($true).GetPreamble())
+        $o.AddRange($content)
+        [System.IO.File]::WriteAllBytes($_.FullName, $o.ToArray())
+        Write-Output ("  已修复 " + $_.Name + " (原本 " + ($n / 3) + " 个 BOM)")
+        $fixed++
+    }
+}
+if ($fixed -eq 0) { Write-Output "  OK: 全部 .c/.h 都是单个 UTF-8 BOM" }
+else {
+    Write-Output ("  已修复 " + $fixed + " 个文件，重新同步到工程...")
+    Get-ChildItem "$src\*" -File -Include *.c,*.h | ForEach-Object {
+        Copy-Item $_.FullName (Join-Path $dst $_.Name) -Force
+    }
+    Write-Output "  已重新同步"
+}
