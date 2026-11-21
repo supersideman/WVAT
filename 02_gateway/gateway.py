@@ -1,4 +1,4 @@
-"""PC 端网关（对应《AI链路设计》§3）
+﻿"""PC 端网关（对应《AI链路设计》§3）
 
 职责：收帧 → 去重 → 双通道路由 → 执行 → 应答。
 不负责：界面渲染（除了可选的镜像窗）。
@@ -31,7 +31,7 @@ DEDUP_WINDOW = 10          # 记住最近 N 个 REQ_ID，重传不重复执行
 HEARTBEAT_SEC = 20
 MAX_MISSED_PONG = 3
 TIME_SYNC_SEC = 30         # 每 30 秒给手表授时一次（校正 RTC）
-WX_INTERVAL_SEC = 1800     # 每 30 分钟取一次天气（天气变化没那么快，也省流量）
+WX_INTERVAL_SEC = 300      # 每 5 分钟刷一次天气（天气变化慢，但丢帧后能很快自愈）
 
 # 慢通道兜底关键词（没有 LLM 也能工作）
 FALLBACK_KEYWORDS = [
@@ -83,7 +83,8 @@ class Gateway:
         self.use_llm = use_llm
         self.asr = asr              # 语音识别器（LiveRecorder 实例；None = 不可用）
         self.weather = weather      # 天气取值器（None = 不推天气）
-        self.last_wx = 0.0          # 上次推天气时间（0 = 连上就推一次）
+        self.last_wx = 0.0          # 上次推天气时间（0 = 还没推过）
+        self.saw_device = False     # 是否收到过设备的任何一帧（= 链路双向通）
         self.asr_error = ""         # 不可用时的原因（启动自检会填）
         self._phrases  = None       # 语法约束用的短语表（惰性生成）
         self.dedup: "queue.OrderedDict[int, str]" = __import__("collections").OrderedDict()
@@ -111,14 +112,17 @@ class Gateway:
             # 天气：连上后立刻推一次，之后每 WX_INTERVAL_SEC 一次。
             # 取天气是**阻塞**的 HTTP 请求（最长 4 秒），所以只在"到点"那一刻做，
             # 平时这一行什么都不开销；取失败会保留旧值并在 weather.py 里退避重试。
-            if (self.weather is not None and getattr(self.ch, "connected", False)
-                    and now - self.last_wx > WX_INTERVAL_SEC):
-                self.last_wx = now
-                self.weather.update(WX_INTERVAL_SEC)
-                fields = self.weather.frame_fields()
-                if fields:
-                    kind, temp = fields
-                    self.ch.send_line(P.wx_event(kind, temp))
+            # 天气：**等设备先说过话**再推，避免把帧发进"只收不发"的黑洞。
+            # 昨天就踩过：链路的"传入"端口能收到手表的按钮，但发不下去，
+            # 于是天气一直卡在设备端显示 "--"。
+            if self.weather is not None and getattr(self.ch, "connected", False) and self.saw_device:
+                if self.last_wx == 0.0 or now - self.last_wx > WX_INTERVAL_SEC:
+                    self.weather.update(WX_INTERVAL_SEC)
+                    fields = self.weather.frame_fields()
+                    if fields:
+                        kind, temp = fields
+                        self.ch.send_line(P.wx_event(kind, temp))
+                        self.last_wx = now
 
             if getattr(self.ch, "connected", False) and now - self.last_ping > HEARTBEAT_SEC:
                 self.ch.send_line(P.ping_frame())
@@ -129,6 +133,7 @@ class Gateway:
                     self.missed_pong = 0
                     self.dedup.clear()
                     self.last_req_id = 0
+                    self.saw_device = False
             time.sleep(0.02)
 
     # ── 单帧处理 ────────────────────────────────────────────
@@ -142,6 +147,8 @@ class Gateway:
             else:
                 print(f"[忽略] 无法解析：{line!r}", flush=True)
             return
+
+        self.saw_device = True       # 设备说话了 → 说明链路是双向通的
 
         if frame.kind == P.KIND_PONG:
             self.missed_pong = 0

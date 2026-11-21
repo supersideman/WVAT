@@ -1,4 +1,4 @@
-"""一键启动网关：自动找 CH340 串口 + 真执行模式。
+﻿"""一键启动网关：自动找 CH340 串口 + 真执行模式。
 
 为什么需要它：
     网关**必须由你自己启动**（在你自己登录的桌面上）。
@@ -95,20 +95,24 @@ def list_bt_ports():
     return cands
 
 
-def probe_port(port: str, baud: int, timeout: float = 2.5) -> bool:
-    """往这个口发一条 OV+PING，看有没有 OV+PONG 回来。
+def probe_port(port: str, baud: int, timeout: float = 8.0) -> str:
+    """探测这个口能不能**双向**收发，返回状态字符串：
 
-    固件收到 PING 会回 PONG（user_link.c 的 s_pong_pending），
-    所以"有回应"就等于"这个口能真正收发"。
+        "pong"  收到 OV+PONG   → 真正的双向通路（可用）
+        "rx"    只收到数据、没有 PONG → 多半是"传入"口：能收不能发
+        "none"  什么都没有     → 没连上 / 设备没跑本版固件
+        "error" 打不开
 
-    ⚠️ 必须在**子线程 + 硬超时**里做：Windows 的蓝牙 SPP 口在建立链路时，
-       serial.Serial() 的 open() 可能卡几十秒甚至一直不返回（踩过：
-       主线程直接 open 会卡死，界面停在"逐个探测"没有任何输出）。
-       线程是 daemon，卡住也不影响继续往下走。
+    为什么要"反复发 PING"而不是发一次：
+      Windows 的蓝牙 SPP 链路是**打开端口时才建立**的，建立过程要 2~5 秒；
+      发一次的话，那条 PING 会在链路还没通时就丢掉，于是把好口误判成坏口。
+      这里每 1 秒补发一次，直到超时。
+
+    ⚠️ 必须在**子线程 + 硬超时**里做：open() 在蓝牙口上可能长时间不返回。
     """
     import threading
 
-    result = {"ok": False}
+    result = {"state": "none"}
 
     def _run() -> None:
         try:
@@ -116,21 +120,56 @@ def probe_port(port: str, baud: int, timeout: float = 2.5) -> bool:
             import time as _t
             with serial.Serial(port, baud, timeout=0.2, write_timeout=1.0) as sp:
                 sp.reset_input_buffer()
-                sp.write(b"OV+PING\r\n")
                 t0 = _t.time()
+                last_ping = 0.0
+                got_any = False
                 while _t.time() - t0 < timeout:
+                    now = _t.time()
+                    if now - last_ping >= 1.0:
+                        sp.write(b"OV+PING\r\n")
+                        last_ping = now
                     line = sp.readline()
-                    if b"OV+PONG" in line:
-                        result["ok"] = True
-                        return
+                    if line:
+                        got_any = True
+                        if b"OV+PONG" in line:
+                            result["state"] = "pong"
+                            return
+                result["state"] = "rx" if got_any else "none"
         except Exception:
-            pass
+            result["state"] = "error"
 
     th = threading.Thread(target=_run, daemon=True)
     th.start()
     th.join(timeout + 3.0)          # 打开卡住也只等这么久
-    return result["ok"]
+    return result["state"]
 
+
+def pick_link(cands):
+    """在候选里挑一条**双向可用**的链路。
+
+    cands: [(dev, baud, kind)]；返回 (dev, baud, kind, state)。
+    优先级：pong（双向通）> rx（只收不发）> none。
+
+    ⚠️ 只收不发的口看起来"有数据"，但网关发不下去——今天就被它坑过：
+       手表按按钮网关有反应，可回执和天气都到不了手表。
+       那种口十有八九是 Windows 给蓝牙建的"传入"端口。
+    """
+    best = None
+    tag = {
+        "pong":  "双向通",
+        "rx":    "只收不发（多半是传入口）",
+        "none":  "无回应",
+        "error": "打不开",
+    }
+    for dev, baud, kind in cands:
+        print(f"           {dev}（{kind}）探测中…", flush=True)
+        st = probe_port(dev, baud)
+        print(f"           {dev}  {tag.get(st, st)}", flush=True)
+        if st == "pong":
+            return dev, baud, kind, st
+        if best is None or (best[3] == "none" and st == "rx"):
+            best = (dev, baud, kind, st)
+    return best
 
 if not port:
     import time
@@ -150,20 +189,13 @@ if not port:
             print("[launcher] 发现蓝牙串口：")
             for dev, desc in cands:
                 print(f"           {dev}   {desc}")
-            print("[launcher] 逐个探测（每个最多 5 秒）：", flush=True)
-            for dev, desc in cands:
-                print(f"           {dev}  探测中…", flush=True)
-                ok = probe_port(dev, 9600)
-                print(f"           {dev}  {'✅ 有回应' if ok else '✗ 无回应'}", flush=True)
-                if ok:
-                    port = dev
-                    baud_used = 9600
-                    break
-            if not port:
-                port = cands[0][0]
-                baud_used = 9600
-                print("[launcher] ⚠️ 没有口回应 PING，先按第一个试")
-                print("[launcher]    若按钮点了网关没反应 → 确认模块 TXD→PA3、RXD→PA2（交叉）")
+            print("[launcher] 逐个探测（每个最多 8 秒，蓝牙链路建立要 2~5 秒）：", flush=True)
+            got = pick_link([(d, 9600, "蓝牙") for d, _ in cands])
+            if got:
+                port, baud_used, _kind, st = got
+                if st != "pong":
+                    print("[launcher] ⚠️ 没有双向可用的口，先按上面选的试")
+                    print("[launcher]    若按钮有反应但回执/天气不到手表 → 换另一个蓝牙口")
 
     elif auto:
         # ── 自动选链路：USB 优先，不通再转蓝牙 ──────────────────
@@ -184,20 +216,15 @@ if not port:
             print("[launcher] 候选链路：")
             for dev, baud, kind in cands:
                 print(f"           {dev}  {baud}  {kind}")
-            print("[launcher] 逐个探测（发 OV+PING，等 OV+PONG）：", flush=True)
-            for dev, baud, kind in cands:
-                print(f"           {dev}（{kind}）探测中…", flush=True)
-                ok = probe_port(dev, baud)
-                print(f"           {dev}  {'✅ 有回应' if ok else '✗ 无回应'}", flush=True)
-                if ok:
-                    port = dev
-                    baud_used = baud
-                    print(f"[launcher] 选用 {dev}（{kind} @{baud}）", flush=True)
-                    break
-            if not port:
-                port, baud_used, kind = cands[0]
-                print("[launcher] ⚠️ 没有链路回应 PING，先按第一个试")
-                print("[launcher]    检查：USB 线是否插好 / 手表是否已复位并运行本版固件")
+            print("[launcher] 逐个探测（每个最多 8 秒）：", flush=True)
+            got = pick_link(cands)
+            if got:
+                port, baud_used, kind, st = got
+                print(f"[launcher] 选用 {port}（{kind} @{baud_used}）", flush=True)
+                if st != "pong":
+                    print("[launcher] ⚠️ 这条链路只收不发或没回应：")
+                    print("[launcher]    · 蓝牙两个口只有一个能用，换另一个试试")
+                    print("[launcher]    · 或插回 USB 线（USB 永远双向通）")
 
     else:
         # 等板子插上：CH340 有时"设备枚举成功但没生成 COM 口"，拔插一次即恢复。
