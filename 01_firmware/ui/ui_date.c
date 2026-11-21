@@ -1,4 +1,4 @@
-﻿/**
+﻿﻿/**
  * @file    ui_date.c
  * @brief   日期页 · LVGL 8.2
  *
@@ -35,8 +35,6 @@
 #define D_PH_W      (UI_W - 2 * D_PH_X)
 #define D_PH_H      92
 #define D_PH_R      14
-#define D_PLUS_LEN  30      /* 加号臂长 */
-#define D_PLUS_TH   6       /* 加号粗 */
 #define WX_ICON_SZ  48      /* 天气图标绘制区边长 */
 
 static lv_obj_t *s_scr     = NULL;
@@ -48,8 +46,7 @@ static lv_obj_t *s_lbl_wd  = NULL;
 
 /* 天气：卡片里左边图标、右边温度；没数据时退回"＋"占位 */
 static lv_obj_t *s_ph_card  = NULL;   /* 卡片本体 */
-static lv_obj_t *s_ph_plus1 = NULL;   /* 加号的横条 */
-static lv_obj_t *s_ph_plus2 = NULL;   /* 加号的竖条 */
+static lv_obj_t *s_wx_none  = NULL;   /* 没有数据时的淡色 "--" 提示 */
 static lv_obj_t *s_wx_icon  = NULL;   /* 图标容器（每次清空重画）*/
 static lv_obj_t *s_wx_temp  = NULL;   /* 温度数字 */
 static lv_obj_t *s_wx_deg   = NULL;   /* 温度右上角的小圆圈（℃ 的度）*/
@@ -142,10 +139,8 @@ static void repaint_weather(void)
     if (!s_ph_card) return;
 
     bool has = (s_wx_kind >= 0);
-    if (s_ph_plus1) { if (has) lv_obj_add_flag(s_ph_plus1, LV_OBJ_FLAG_HIDDEN);
-                      else     lv_obj_clear_flag(s_ph_plus1, LV_OBJ_FLAG_HIDDEN); }
-    if (s_ph_plus2) { if (has) lv_obj_add_flag(s_ph_plus2, LV_OBJ_FLAG_HIDDEN);
-                      else     lv_obj_clear_flag(s_ph_plus2, LV_OBJ_FLAG_HIDDEN); }
+    if (s_wx_none) { if (has) lv_obj_add_flag(s_wx_none, LV_OBJ_FLAG_HIDDEN);
+                     else     lv_obj_clear_flag(s_wx_none, LV_OBJ_FLAG_HIDDEN); }
 
     if (s_wx_icon) {
         lv_obj_clean(s_wx_icon);                       /* 先清掉旧图标的所有图元 */
@@ -229,11 +224,14 @@ static void build(void)
     s_ph_card = dbox(s_scr, D_PH_X, D_PH_Y, D_PH_W, D_PH_H, D_PH_R,
                      UI_C_CARD, LV_OPA_COVER);
 
-    /* 占位用的加号（横竖两条圆角矩形）*/
-    s_ph_plus1 = dbox(s_ph_card, (D_PH_W - D_PLUS_LEN) / 2, (D_PH_H - D_PLUS_TH) / 2,
-                      D_PLUS_LEN, D_PLUS_TH, D_PLUS_TH / 2, UI_C_DIM, LV_OPA_60);
-    s_ph_plus2 = dbox(s_ph_card, (D_PH_W - D_PLUS_TH) / 2, (D_PH_H - D_PLUS_LEN) / 2,
-                      D_PLUS_TH, D_PLUS_LEN, D_PLUS_TH / 2, UI_C_DIM, LV_OPA_60);
+    /* 没有天气数据时：卡片中央一个淡色 "--"（和时钟的 "--:--" 一个风格）*/
+    s_wx_none = lv_label_create(s_ph_card);
+    lv_obj_set_pos(s_wx_none, 0, (D_PH_H - 20) / 2);
+    lv_obj_set_width(s_wx_none, D_PH_W);
+    lv_obj_set_style_text_font(s_wx_none, UI_FONT_NUM14, 0);
+    lv_obj_set_style_text_color(s_wx_none, COL(UI_C_DIM), 0);
+    lv_obj_set_style_text_align(s_wx_none, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(s_wx_none, "--");
 
     /* 图标容器：左半侧，垂直居中 */
     s_wx_icon = dbox(s_ph_card, 26, (D_PH_H - WX_ICON_SZ) / 2,
