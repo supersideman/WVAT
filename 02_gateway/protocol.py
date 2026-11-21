@@ -69,9 +69,19 @@ def time_event(now=None) -> str:
     return ev_frame("TIME", f"{now:%H:%M:%S},{now:%Y-%m-%d}")
 
 
+def wx_event(kind: int, temp: int) -> str:
+    """代理 → 终端：天气（手表只负责显示，不联网）。
+
+    格式：OV+EV=WX,<类别>,<温度>
+      kind  0=晴 1=多云 2=雨 3=雪（雷雨归到雨，雾归到多云）
+      temp  整数摄氏度（可为负）
+    例：OV+EV=WX,2,14   → 雨，14℃
+    """
+    return ev_frame("WX", f"{int(kind)},{int(temp)}")
+
+
 def ping_frame() -> str:
     return f"OV+{KIND_PING}{TERMINATOR}"
-
 
 def pong_frame() -> str:
     return f"OV+{KIND_PONG}{TERMINATOR}"

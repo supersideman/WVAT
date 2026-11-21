@@ -14,6 +14,7 @@
 #include "user_clock.h"
 #include "ui_rec.h"
 #include "ui_history.h"      /* 录音页：显示识别文字 */
+#include "ui_date.h"        /* 日期页：显示天气 */
 
 #define LINK_LINE_MAX   96
 #define LINK_POLL_MS    30
@@ -59,6 +60,12 @@ static char s_asr_buf[96];
  * ⚠️ 为什么不在中断里直接回：9600 波特率发 9 个字节要 9ms，
  *    放在中断里会长时间阻塞，可能拖垮 FreeRTOS 的节拍。 */
 static volatile bool s_pong_pending = false;
+
+/* 天气信箱：网关推来的 OV+EV=WX,<类别>,<温度>。
+ * 解析在中断里做（纯数值，很快），真正刷界面交给 30ms 定时器。 */
+static volatile bool s_wx_ready = false;
+static volatile int  s_wx_kind  = -1;
+static volatile int  s_wx_temp  = 0;
 
 /* 链路活跃时间戳（tick）：用来点亮主界面右上角的链路指示
  *   U = USB 在线（青色） / B = 蓝牙在线（蓝色） / 灰点 = 都没数据
@@ -295,6 +302,19 @@ static void link_parse_line(char *line)
         return;
     }
 
+    /* 天气：网关定时推送 OV+EV=WX,<类别>,<温度>
+     *   类别 0=晴 1=多云 2=雨 3=雪（雷雨归雨、雾归多云，网关侧已归一）
+     *   温度 整数摄氏度，可为负                                     */
+    if (strncmp(line, "OV+EV=WX,", 9) == 0) {
+        int k = -1, t = 0;
+        if (sscanf(line + 9, "%d,%d", &k, &t) == 2 && k >= 0 && k <= 3) {
+            s_wx_kind  = k;
+            s_wx_temp  = t;
+            s_wx_ready = true;         /* 界面刷新交给定时器 */
+        }
+        return;
+    }
+
     if (strncmp(line, "OV+EV=ASR,", 10) == 0) {        const char *p = line + 10;
         size_t i = 0;
         while (p[i] != '\0' && i < sizeof(s_asr_buf) - 1) {
@@ -411,6 +431,12 @@ static void link_poll_timer(lv_timer_t *t)
     if (s_pong_pending) {
         s_pong_pending = false;
         link_send_frame("OV+PONG\r\n", 9);
+    }
+
+    /* ⑤ 天气到达 → 更新日期页（LVGL 上下文）*/
+    if (s_wx_ready) {
+        s_wx_ready = false;
+        ui_date_set_weather(s_wx_kind, s_wx_temp);
     }
 
     /* ⑤ 链路指示：最近 25 秒内谁收到过数据，就点亮谁

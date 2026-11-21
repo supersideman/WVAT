@@ -29,6 +29,13 @@ bool ui_date_visible(void);
  */
 void ui_date_set_text(const char *day, const char *ym, const char *wd);
 
+/**
+ * 更新天气（由网关通过 OV+EV=WX,<类别>,<温度> 推来）。
+ * @param kind 0=晴 1=多云 2=雨 3=雪；负数表示"没有数据"（显示加号占位）
+ * @param temp 整数摄氏度（可为负）
+ */
+void ui_date_set_weather(int kind, int temp);
+
 #ifdef __cplusplus
 }
 #endif

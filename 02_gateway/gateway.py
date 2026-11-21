@@ -31,6 +31,7 @@ DEDUP_WINDOW = 10          # 记住最近 N 个 REQ_ID，重传不重复执行
 HEARTBEAT_SEC = 20
 MAX_MISSED_PONG = 3
 TIME_SYNC_SEC = 30         # 每 30 秒给手表授时一次（校正 RTC）
+WX_INTERVAL_SEC = 1800     # 每 30 分钟取一次天气（天气变化没那么快，也省流量）
 
 # 慢通道兜底关键词（没有 LLM 也能工作）
 FALLBACK_KEYWORDS = [
@@ -75,11 +76,14 @@ def _similarity(a: str, b: str) -> float:
 
 
 class Gateway:
-    def __init__(self, channel, executor: Executor, use_llm: bool = False, asr=None):
+    def __init__(self, channel, executor: Executor, use_llm: bool = False, asr=None,
+                 weather=None):
         self.ch = channel
         self.ex = executor
         self.use_llm = use_llm
         self.asr = asr              # 语音识别器（LiveRecorder 实例；None = 不可用）
+        self.weather = weather      # 天气取值器（None = 不推天气）
+        self.last_wx = 0.0          # 上次推天气时间（0 = 连上就推一次）
         self.asr_error = ""         # 不可用时的原因（启动自检会填）
         self._phrases  = None       # 语法约束用的短语表（惰性生成）
         self.dedup: "queue.OrderedDict[int, str]" = __import__("collections").OrderedDict()
@@ -103,6 +107,18 @@ class Gateway:
             if getattr(self.ch, "connected", False) and now - self.last_time_sync > TIME_SYNC_SEC:
                 self.ch.send_line(P.time_event())
                 self.last_time_sync = now
+
+            # 天气：连上后立刻推一次，之后每 WX_INTERVAL_SEC 一次。
+            # 取天气是**阻塞**的 HTTP 请求（最长 4 秒），所以只在"到点"那一刻做，
+            # 平时这一行什么都不开销；取失败会保留旧值并在 weather.py 里退避重试。
+            if (self.weather is not None and getattr(self.ch, "connected", False)
+                    and now - self.last_wx > WX_INTERVAL_SEC):
+                self.last_wx = now
+                self.weather.update(WX_INTERVAL_SEC)
+                fields = self.weather.frame_fields()
+                if fields:
+                    kind, temp = fields
+                    self.ch.send_line(P.wx_event(kind, temp))
 
             if getattr(self.ch, "connected", False) and now - self.last_ping > HEARTBEAT_SEC:
                 self.ch.send_line(P.ping_frame())
@@ -399,6 +415,10 @@ def main() -> int:
     ap.add_argument("--asr", action="store_true", help="用电脑麦克风 + 本地 Vosk 做真语音识别")
     ap.add_argument("--mic", type=int, default=None, help="指定输入设备编号（见 asr.py 的设备列表）")
     ap.add_argument("--list", action="store_true", help="打印白名单并退出")
+    ap.add_argument("--no-weather", action="store_true",
+                    help="不向手表推送天气（默认会推，城市见 weather.py）")
+    ap.add_argument("--wx-lat", type=float, default=None, help="天气用的纬度（默认取 weather.py）")
+    ap.add_argument("--wx-lon", type=float, default=None, help="天气用的经度（默认取 weather.py）")
     args = ap.parse_args()
 
     if args.list:
@@ -436,7 +456,21 @@ def main() -> int:
     else:
         asr_error = "未加 --asr 参数"
 
-    gw = Gateway(ch, Executor(dry_run=not args.enable_actions), use_llm=args.llm, asr=asr)
+    # 天气：默认启用（open-meteo 免费、无需 key）。取失败只打印提示，不影响其它功能。
+    weather = None
+    if not args.no_weather:
+        try:
+            import weather as wx_mod
+            lat = args.wx_lat if args.wx_lat is not None else wx_mod.LAT
+            lon = args.wx_lon if args.wx_lon is not None else wx_mod.LON
+            weather = wx_mod.Weather(lat, lon)
+            print(f"[weather] 已启用：{weather.city} ({lat:.4f}, {lon:.4f})，"
+                  f"每 {WX_INTERVAL_SEC // 60} 分钟推送一次", flush=True)
+        except Exception as exc:                      # noqa: BLE001
+            print(f"[weather] 初始化失败，跳过天气：{type(exc).__name__}: {exc}", flush=True)
+
+    gw = Gateway(ch, Executor(dry_run=not args.enable_actions), use_llm=args.llm,
+                 asr=asr, weather=weather)
     gw.asr_error = asr_error
     print(f"[gateway] 动作执行：{'真执行' if args.enable_actions else '演练模式（不改系统）'}",
           flush=True)
