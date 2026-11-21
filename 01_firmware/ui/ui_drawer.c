@@ -129,11 +129,46 @@ static void on_intent_clicked(lv_event_t *e)
     /* 注意：**不切页**，留在抽屉里继续操作 */
 }
 
-/** 点了返回 */
+/** 点了返回：回主界面
+ *  ⚠️ 动画方向用 MOVE_LEFT：抽屉现在是三页里最左边那一页，
+ *     回主界面＝整屏向左推（和"从主界面右滑过来"对称）。 */
 static void on_back_clicked(lv_event_t *e)
 {
     if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
-    ui_stage_show_home(LV_SCR_LOAD_ANIM_MOVE_RIGHT);
+    ui_stage_show_home(LV_SCR_LOAD_ANIM_MOVE_LEFT);
+}
+
+/* 背景向左滑 → 回主界面（与主界面"右滑进这里"对称）。
+   抽屉格子和返回键自己是可点的，事件先被它们拿走，不会误翻页。 */
+static int s_press_x = -1;
+
+static void on_bg_pressed(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_PRESSED) return;
+    lv_indev_t *indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_point_t p;
+    lv_indev_get_point(indev, &p);
+    s_press_x = p.x;
+}
+
+static void on_bg_released(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_RELEASED) return;
+    if (s_press_x < 0) return;
+
+    int dx = 0;
+    lv_indev_t *indev = lv_indev_get_act();
+    if (indev) {
+        lv_point_t p;
+        lv_indev_get_point(indev, &p);
+        dx = p.x - s_press_x;
+    }
+    s_press_x = -1;
+
+    if (dx <= -UI_PAGE_SWIPE_PX) {          /* 向左滑 → 回主界面 */
+        ui_stage_show_home(LV_SCR_LOAD_ANIM_MOVE_LEFT);
+    }
 }
 
 /* ───────────────── 构建 ───────────────── */
@@ -199,9 +234,25 @@ lv_obj_t *ui_drawer_create(void)
         dpressable(card, on_intent_clicked, (void *)(intptr_t)k_items[i].icon);
     }
 
+    /* ── 底部页面条：三个圆点（本页在最左）+ 右侧 ">" ──
+       位置 227~280 本来就是空的（格子结束在 227）。 */
+    lv_obj_t *pbar = dbox(s_drawer, 0, UI_PAGEBAR_Y, UI_W, UI_PAGEBAR_H, 0,
+                          UI_C_BG, LV_OPA_TRANSP);
+    ui_page_dots(pbar, UI_PAGEBAR_H, 0);
+    lv_obj_t *rg = dbox(pbar, UI_W - 26, (UI_PAGEBAR_H - 16) / 2, 16, 16, 0,
+                        UI_C_BG, LV_OPA_TRANSP);
+    lv_obj_t *rgl = lv_label_create(rg);
+    lv_obj_set_style_text_font(rgl, UI_FONT_NUM14, 0);
+    lv_obj_set_style_text_color(rgl, lv_color_hex(UI_C_DIM), 0);
+    lv_label_set_text(rgl, ">");
+
+    /* 整层背景：向左滑回主界面（放最后，只兜住没被格子接走的触点）*/
+    lv_obj_add_flag(s_drawer, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(s_drawer, on_bg_pressed,  LV_EVENT_PRESSED,  NULL);
+    lv_obj_add_event_cb(s_drawer, on_bg_released, LV_EVENT_RELEASED, NULL);
+
     return s_drawer;
 }
-
 void ui_drawer_set_result(ui_icon_t kind, bool ok)
 {
     if (!s_drawer) return;              /* 抽屉还没建过，忽略 */
@@ -212,5 +263,5 @@ void ui_drawer_set_result(ui_icon_t kind, bool ok)
 void ui_drawer_open(void)
 {
     lv_obj_t *scr = ui_drawer_create();
-    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_LEFT, 200, 0, false);
+    lv_scr_load_anim(scr, LV_SCR_LOAD_ANIM_MOVE_RIGHT, 200, 0, false);
 }

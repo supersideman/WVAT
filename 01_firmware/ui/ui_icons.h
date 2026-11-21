@@ -47,6 +47,16 @@ typedef enum {
 void ui_icon_draw(lv_obj_t *parent, ui_icon_t kind, int cx, int cy, int size,
                   uint32_t color);
 
+/**
+ * 画"三页指示"的三个圆点（左=更多指令，中=主界面，右=设置）。
+ * 三个页面共用同一套坐标，保证翻页时圆点位置完全一致、不跳动。
+ *
+ * @param parent   父对象（一般是底部页面条）
+ * @param bar_h    页面条高度（用来垂直居中）
+ * @param active   当前页：0=左 1=中 2=右
+ */
+void ui_page_dots(lv_obj_t *parent, int bar_h, int active);
+
 #ifdef __cplusplus
 }
 #endif

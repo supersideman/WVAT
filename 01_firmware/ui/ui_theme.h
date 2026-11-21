@@ -1,4 +1,4 @@
-﻿/**
+﻿﻿/**
  * @file    ui_theme.h
  * @brief   配色与布局常量（唯一事实来源）· 图形化版本 v2
  *
@@ -120,6 +120,7 @@
 #define UI_PAGEBAR_H      (UI_H - UI_PAGEBAR_Y)
 #define UI_PAGEDOT_SZ     6
 #define UI_PAGEDOT_GAP    10
+#define UI_PAGEDOT_OFF    11   /* 三页时相邻圆点中心距 */
 
 /* 翻页滑动阈值：横向位移超过这么多像素才算"要翻页"（防误触）。
    实测 30px 在 240 宽的屏上大约是全屏的 1/8，既能轻松触发，

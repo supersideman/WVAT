@@ -166,8 +166,10 @@ static void on_bg_released(lv_event_t *e)
     }
     s_press_x = -1;
 
-    if (dx <= -UI_PAGE_SWIPE_PX) {          /* 向左滑 → 下一页（设置） */
+    if (dx <= -UI_PAGE_SWIPE_PX) {          /* 向左滑 → 右页：设置 */
         ui_settings_open();
+    } else if (dx >= UI_PAGE_SWIPE_PX) {    /* 向右滑 → 左页：更多指令 */
+        ui_drawer_open();
     }
 }
 
@@ -277,21 +279,14 @@ void ui_main_build(lv_obj_t *parent)
     make_pressable(btn, on_talk_clicked, NULL);
     lv_obj_set_style_border_width(btn, UI_BTN_BORDER + 1, LV_STATE_PRESSED);
 
-    /* 底部页面条：两个圆点（第 1 页高亮）+ 右侧 ">" 提示。
-       点一下或左右滑动 → 进设置页（第 1/2 页的切换）。 */
+    /* 底部页面条：三个圆点（中间=本页）+ 两侧箭头。
+       点一下或横向滑动 → 左右翻页（左=更多指令，右=设置）。 */
     lv_obj_t *pbar = box(s_scr, 0, UI_PAGEBAR_Y, UI_W, UI_PAGEBAR_H, 0,
                          UI_C_BG, LV_OPA_TRANSP);
-    {
-        int cx = UI_W / 2;
-        box(pbar, cx - UI_PAGEDOT_GAP / 2 - UI_PAGEDOT_SZ,
-            (UI_PAGEBAR_H - UI_PAGEDOT_SZ) / 2, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ,
-            UI_PAGEDOT_SZ / 2, UI_C_ACCENT, LV_OPA_COVER);      /* 第 1 页：亮 */
-        box(pbar, cx + UI_PAGEDOT_GAP / 2,
-            (UI_PAGEBAR_H - UI_PAGEDOT_SZ) / 2, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ,
-            UI_PAGEDOT_SZ / 2, UI_C_DIM, LV_OPA_COVER);         /* 第 2 页：暗 */
-        num_label(pbar, UI_W - 26, (UI_PAGEBAR_H - 16) / 2, 16, UI_FONT_NUM14,
-                  UI_C_DIM, ">");
-    }
+    ui_page_dots(pbar, UI_PAGEBAR_H, 1);
+    num_label(pbar, 8, (UI_PAGEBAR_H - 16) / 2, 16, UI_FONT_NUM14, UI_C_DIM, "<");
+    num_label(pbar, UI_W - 26, (UI_PAGEBAR_H - 16) / 2, 16, UI_FONT_NUM14,
+              UI_C_DIM, ">");
     lv_obj_add_flag(pbar, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(pbar, on_pagebar_released, LV_EVENT_RELEASED, NULL);
 

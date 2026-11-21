@@ -274,13 +274,7 @@ static void build(void)
     lv_obj_t *lft = slabel(bar, 14, (UI_PAGEBAR_H - 16) / 2, 20, UI_C_DIM,
                            LV_TEXT_ALIGN_LEFT, "<");
     (void)lft;
-    int cx = UI_W / 2;
-    sbox(bar, cx - UI_PAGEDOT_GAP / 2 - UI_PAGEDOT_SZ,
-         (UI_PAGEBAR_H - UI_PAGEDOT_SZ) / 2, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ,
-         UI_PAGEDOT_SZ / 2, UI_C_DIM, LV_OPA_COVER);
-    sbox(bar, cx + UI_PAGEDOT_GAP / 2,
-         (UI_PAGEBAR_H - UI_PAGEDOT_SZ) / 2, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ,
-         UI_PAGEDOT_SZ / 2, UI_C_ACCENT, LV_OPA_COVER);
+    ui_page_dots(bar, UI_PAGEBAR_H, 2);        /* 三页：本页在最右 */
     pressable(bar, on_back_clicked);
 
     /* 整层背景：向右滑返回（放最后，只兜住没被行卡片接走的触点）*/

@@ -1,4 +1,4 @@
-﻿/**
+﻿﻿/**
  * @file    ui_icons.c
  * @brief   纯图元图标库实现 · LVGL 8.2
  *
@@ -303,5 +303,24 @@ void ui_icon_draw(lv_obj_t *parent, ui_icon_t kind, int cx, int cy, int size,
     case UI_ICON_CROSS:  ic_cross(parent, cx, cy, size, color);  break;
     case UI_ICON_BACK:   ic_back(parent, cx, cy, size, color);   break;
     default: break;
+    }
+}
+
+/* ───────────────── 三页指示圆点 ───────────────── */
+
+void ui_page_dots(lv_obj_t *parent, int bar_h, int active)
+{
+    int cy = (bar_h - UI_PAGEDOT_SZ) / 2;
+    int cx = UI_W / 2;
+
+    for (int i = 0; i < 3; i++) {
+        lv_obj_t *d = lv_obj_create(parent);
+        lv_obj_remove_style_all(d);
+        lv_obj_set_pos(d, cx + (i - 1) * UI_PAGEDOT_OFF - UI_PAGEDOT_SZ / 2, cy);
+        lv_obj_set_size(d, UI_PAGEDOT_SZ, UI_PAGEDOT_SZ);
+        lv_obj_set_style_radius(d, UI_PAGEDOT_SZ / 2, 0);
+        lv_obj_set_style_bg_color(d, lv_color_hex(i == active ? UI_C_ACCENT : UI_C_DIM), 0);
+        lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE);
     }
 }
