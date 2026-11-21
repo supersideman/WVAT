@@ -64,6 +64,20 @@ void ui_main_set_result(ui_icon_t intent, bool ok);
  */
 void ui_main_set_reply(const char *text);
 
+/** 链路状态（右上角小指示器）*/
+typedef enum {
+    UI_LINK_NONE = 0,   /* 灰点：没有链路 */
+    UI_LINK_USB,        /* 青点 + U：USB 串口在线 */
+    UI_LINK_BT,         /* 蓝点 + B：蓝牙在线 */
+} ui_link_t;
+
+/**
+ * 更新链路状态指示。
+ * 链路层每隔一段时间根据"最近有没有收到帧"调用它；
+ * 状态没变时内部会跳过重绘，可以放心高频调用。
+ */
+void ui_main_set_link(ui_link_t link);
+
 /**
  * 更新时钟与日期
  * @param time_str "10:24"（数字+冒号，内置字体即可）

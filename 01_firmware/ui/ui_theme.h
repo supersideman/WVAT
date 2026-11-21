@@ -61,6 +61,20 @@
 #define UI_STATUS_H      44   /* 顶部状态区高度 */
 #define UI_HINT_H        36   /* 底部提示条高度 */
 
+/* ── 链路状态指示（主界面右上角）───────────────────────
+   时钟是居中的 44 号数字（最宽 "23:59" 约 110px），右上角天然是空的，
+   所以把"连上哪个链路"放这里：一个小圆点 + 一个字母
+     灰点  = 没有链路
+     青点 U = USB 串口在线
+     蓝点 B = 蓝牙在线
+   颜色 + 字母双编码，隔着半米也能看出是哪个。 */
+#define UI_LINK_DOT_SZ   8
+#define UI_LINK_DOT_X    (UI_W - 36)
+#define UI_LINK_DOT_Y    16
+#define UI_LINK_TXT_X    (UI_W - 24)
+#define UI_LINK_TXT_Y    9
+#define UI_LINK_TXT_W    16
+
 /* ── 抽屉页（「更多」：只放拓展指令，每行 3 格 × 2 行 = 6 格）─────
    主界面已经有「音乐播放/暂停」「下一首」，所以抽屉不再重复它们。 */
 #define UI_DRW_TOP_H     44   /* 顶部条：左=返回键，右=操作反馈 */

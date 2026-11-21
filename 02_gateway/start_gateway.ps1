@@ -11,7 +11,8 @@
 param(
     [switch]$Dry,      # 演练模式：不真正操作电脑
     [switch]$Fake,     # 不启用语音识别
-    [switch]$Bt,       # 走蓝牙（HC-05，9600），不找 CH340
+    [switch]$Bt,       # 只走蓝牙（HC-05，9600），不找 CH340
+    [switch]$Auto,     # 自动选链路：USB 优先，不通转蓝牙（start_gateway.cmd 默认用它）
     [string]$Port = "" # 手动指定串口，如 COM13
 )
 
@@ -59,7 +60,8 @@ Write-Info "[launcher] pylibs: $pylibs"
 $argv = @("run_gateway.py")
 if ($Dry)  { $argv += "-Dry" }
 if ($Fake) { $argv += "fake" }
-if ($Bt)   { $argv += "bt" }
+if ($Bt)   { $argv += "bt" }      # 明确要蓝牙时优先于自动模式
+elseif ($Auto) { $argv += "auto" }
 if ($Port) { $argv += "-Port"; $argv += $Port }
 
 Write-Info "[launcher] 参数: $($argv -join ' ')"

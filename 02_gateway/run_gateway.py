@@ -36,20 +36,26 @@ if _pylibs not in sys.path:
 
 # ── 参数 ────────────────────────────────────────────────
 #   python run_gateway.py            → 自动找 CH340（USB 串口）
-#   python run_gateway.py bt         → 自动找蓝牙 SPP 串口（HC-05）
+#   python run_gateway.py auto       → **自动选链路**：USB 优先，不行转蓝牙
+#   python run_gateway.py bt         → 只找蓝牙 SPP 串口（HC-05）
 #   python run_gateway.py COM13      → 手动指定
 #   再跟 dry / fake 可组合
 port = ""
 dry = False
 bt = False
+auto = False
 for a in sys.argv[1:]:
     la = a.lower()
     if la == "dry":
         dry = True
     elif la == "bt":
         bt = True
+    elif la == "auto":
+        auto = True
     else:
         port = a
+
+baud_used = 115200          # auto/bt 模式下会被改成实际生效的波特率
 
 
 def find_ch340() -> str:
@@ -89,7 +95,7 @@ def list_bt_ports():
     return cands
 
 
-def probe_bt_port(port: str, timeout: float = 2.5) -> bool:
+def probe_port(port: str, baud: int, timeout: float = 2.5) -> bool:
     """往这个口发一条 OV+PING，看有没有 OV+PONG 回来。
 
     固件收到 PING 会回 PONG（user_link.c 的 s_pong_pending），
@@ -108,7 +114,7 @@ def probe_bt_port(port: str, timeout: float = 2.5) -> bool:
         try:
             import serial
             import time as _t
-            with serial.Serial(port, 9600, timeout=0.2, write_timeout=1.0) as sp:
+            with serial.Serial(port, baud, timeout=0.2, write_timeout=1.0) as sp:
                 sp.reset_input_buffer()
                 sp.write(b"OV+PING\r\n")
                 t0 = _t.time()
@@ -147,15 +153,52 @@ if not port:
             print("[launcher] 逐个探测（每个最多 5 秒）：", flush=True)
             for dev, desc in cands:
                 print(f"           {dev}  探测中…", flush=True)
-                ok = probe_bt_port(dev)
+                ok = probe_port(dev, 9600)
                 print(f"           {dev}  {'✅ 有回应' if ok else '✗ 无回应'}", flush=True)
                 if ok:
                     port = dev
+                    baud_used = 9600
                     break
             if not port:
                 port = cands[0][0]
+                baud_used = 9600
                 print("[launcher] ⚠️ 没有口回应 PING，先按第一个试")
                 print("[launcher]    若按钮点了网关没反应 → 确认模块 TXD→PA3、RXD→PA2（交叉）")
+
+    elif auto:
+        # ── 自动选链路：USB 优先，不通再转蓝牙 ──────────────────
+        print("[launcher] 自动模式：先找 USB 串口，不通再转蓝牙")
+        cands = []
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            ch = find_ch340()
+            if ch:
+                cands.append((ch, 115200, "USB"))
+            for dev, desc in list_bt_ports():
+                cands.append((dev, 9600, "蓝牙"))
+            if cands:
+                break
+            time.sleep(0.5)
+
+        if cands:
+            print("[launcher] 候选链路：")
+            for dev, baud, kind in cands:
+                print(f"           {dev}  {baud}  {kind}")
+            print("[launcher] 逐个探测（发 OV+PING，等 OV+PONG）：", flush=True)
+            for dev, baud, kind in cands:
+                print(f"           {dev}（{kind}）探测中…", flush=True)
+                ok = probe_port(dev, baud)
+                print(f"           {dev}  {'✅ 有回应' if ok else '✗ 无回应'}", flush=True)
+                if ok:
+                    port = dev
+                    baud_used = baud
+                    print(f"[launcher] 选用 {dev}（{kind} @{baud}）", flush=True)
+                    break
+            if not port:
+                port, baud_used, kind = cands[0]
+                print("[launcher] ⚠️ 没有链路回应 PING，先按第一个试")
+                print("[launcher]    检查：USB 线是否插好 / 手表是否已复位并运行本版固件")
+
     else:
         # 等板子插上：CH340 有时"设备枚举成功但没生成 COM 口"，拔插一次即恢复。
         # 所以这里给 30 秒窗口，而不是立刻退出——插线顺序就不讲究了。
@@ -190,15 +233,16 @@ if not port:
 import gateway  # noqa: E402
 
 argv = ["gateway.py", "--transport", "serial", "--serial-port", port]
-if bt:
-    # HC-05 出厂就是 9600 8N1；USART1（USB）才是 115200
-    argv += ["--baudrate", "9600"]
+if baud_used != 115200:
+    # HC-05 出厂 9600；USB（CH340）是 115200。波特率跟着探测结果走，
+    # 不要按"模式"猜——自动模式下两条链路都可能是候选。
+    argv += ["--baudrate", str(baud_used)]
 if not dry:
     argv.append("--enable-actions")
 # 默认启用电脑麦克风 + 本地识别；想用假识别就传 fake
 if "fake" not in sys.argv[1:]:
     argv.append("--asr")
 sys.argv = argv
-print(f"[launcher] 启动网关：{'蓝牙' if bt else 'USB 串口'} {port}"
-      f"{' @9600' if bt else ''}，{'演练模式' if dry else '真执行模式'}")
+print(f"[launcher] 启动网关：串口 {port} @{baud_used}，"
+      f"{'演练模式' if dry else '真执行模式'}")
 raise SystemExit(gateway.main())

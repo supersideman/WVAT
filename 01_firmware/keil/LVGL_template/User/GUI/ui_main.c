@@ -31,6 +31,11 @@ static bool       s_res_ok = true;
 static lv_obj_t *s_res_slot_intent;   /* 左侧图标容器 */
 static lv_obj_t *s_res_slot_status;   /* 右侧状态容器 */
 
+/* 链路状态指示（右上角：圆点 + 字母）*/
+static lv_obj_t *s_link_dot;
+static lv_obj_t *s_link_txt;
+static ui_link_t s_link_shown = UI_LINK_NONE;
+
 static ui_intent_cb_t s_intent_cb = NULL;   /* 链路层注册的意图回调（可为空）*/
 static ui_text_cb_t   s_text_cb   = NULL;   /* 录音页确认发送时用 */
 static ui_mic_cb_t    s_mic_cb    = NULL;   /* 录音开始/结束（电脑麦克风兜底）*/
@@ -164,6 +169,13 @@ void ui_main_build(lv_obj_t *parent)
     s_lbl_time = num_label(s_scr, 0, UI_TIME_Y, UI_W, UI_FONT_NUM44,
                            UI_C_TEXT, "--:--");
 
+    /* 链路状态：右上角小圆点 + 字母（时钟居中，右上角是空的）*/
+    s_link_dot = box(s_scr, UI_LINK_DOT_X, UI_LINK_DOT_Y, UI_LINK_DOT_SZ,
+                     UI_LINK_DOT_SZ, UI_LINK_DOT_SZ / 2, UI_C_DIM, LV_OPA_COVER);
+    s_link_txt = num_label(s_scr, UI_LINK_TXT_X, UI_LINK_TXT_Y, UI_LINK_TXT_W,
+                           UI_FONT_NUM14, UI_C_DIM, "");
+    s_link_shown = UI_LINK_NONE;
+
     /* 日期：纯数字，例如 "10/20"（不需要字库） */
     s_lbl_date = num_label(s_scr, 0, UI_DATE_Y, UI_W, UI_FONT_NUM14,
                            UI_C_DIM, "--/--");
@@ -272,6 +284,25 @@ void ui_main_set_reply(const char *text)
 {
     if (!s_lbl_reply) return;
     lv_label_set_text(s_lbl_reply, (text && text[0]) ? text : "");
+}
+
+void ui_main_set_link(ui_link_t link)
+{
+    if (link == s_link_shown) return;      /* 状态没变就不重绘（可高频调用）*/
+    s_link_shown = link;
+
+    uint32_t col;
+    const char *txt;
+    switch (link) {
+    case UI_LINK_USB: col = UI_C_ACCENT; txt = "U"; break;   /* 青：USB 在线 */
+    case UI_LINK_BT:  col = UI_C_INFO;   txt = "B"; break;   /* 蓝：蓝牙在线 */
+    default:          col = UI_C_DIM;    txt = "";  break;   /* 灰：离线 */
+    }
+    if (s_link_dot) lv_obj_set_style_bg_color(s_link_dot, COL(col), 0);
+    if (s_link_txt) {
+        lv_obj_set_style_text_color(s_link_txt, COL(col), 0);
+        lv_label_set_text(s_link_txt, txt);
+    }
 }
 
 void ui_main_set_time(const char *time_str, const char *date_str)

@@ -60,6 +60,13 @@ static char s_asr_buf[96];
  *    放在中断里会长时间阻塞，可能拖垮 FreeRTOS 的节拍。 */
 static volatile bool s_pong_pending = false;
 
+/* 链路活跃时间戳（tick）：用来点亮主界面右上角的链路指示
+ *   U = USB 在线（青色） / B = 蓝牙在线（蓝色） / 灰点 = 都没数据
+ * 只要某个口收到过字节就刷新它，界面那边由 30ms 定时器判断是否超时。 */
+static volatile uint32_t s_last_usb_ms = 0;
+static volatile uint32_t s_last_bt_ms  = 0;
+#define LINK_ALIVE_MS   25000u   /* 网关每 20 秒发一次 PING，留 5 秒余量 */
+
 /* ── 发送侧 ───────────────────────────────────────────── */
 static uint8_t    s_req_id  = 0;
 static ui_icon_t  s_pending = UI_ICON_MUSIC;   /* 正在等回执的意图 */
@@ -268,6 +275,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart->Instance == USART1) {
         char c = (char)s_rx_byte;
+        s_last_usb_ms = HAL_GetTick();      /* 有字节就说明 USB 链路活着 */
         if (c == '\n') {
             if (s_len > 0) {
                 s_line[s_len] = '\0';
@@ -284,6 +292,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         HAL_UART_Receive_IT(&huart1, &s_rx_byte, 1);
     } else if (huart->Instance == USART2) {
         char c = (char)s_bt_rx_byte;
+        s_last_bt_ms = HAL_GetTick();       /* 有字节就说明蓝牙链路活着 */
 
         /* 收到蓝牙第一帧时在 USB 上提示一次：说明蓝牙链路真的通了 */
         if (!s_bt_first_frame) {
@@ -362,6 +371,24 @@ static void link_poll_timer(lv_timer_t *t)
     if (s_pong_pending) {
         s_pong_pending = false;
         link_send_frame("OV+PONG\r\n", 9);
+    }
+
+    /* ⑤ 链路指示：最近 25 秒内谁收到过数据，就点亮谁
+     *    U（青）= USB 在线，B（蓝）= 蓝牙在线，灰点 = 都没有
+     *    两路都活着时显示"更近"的那一路，切换不留延迟感。 */
+    {
+        uint32_t now = HAL_GetTick();
+        bool usb_ok = (s_last_usb_ms != 0) && ((now - s_last_usb_ms) < LINK_ALIVE_MS);
+        bool bt_ok  = (s_last_bt_ms  != 0) && ((now - s_last_bt_ms)  < LINK_ALIVE_MS);
+        ui_link_t st = UI_LINK_NONE;
+        if (usb_ok && bt_ok) {
+            st = ((now - s_last_usb_ms) <= (now - s_last_bt_ms)) ? UI_LINK_USB : UI_LINK_BT;
+        } else if (usb_ok) {
+            st = UI_LINK_USB;
+        } else if (bt_ok) {
+            st = UI_LINK_BT;
+        }
+        ui_main_set_link(st);        /* 状态没变时内部直接返回，代价可忽略 */
     }
 }
 
