@@ -1,0 +1,10 @@
+# 构建产物与本地配置（Android Studio 会生成）
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.cxx/
+*.apk
+*.aab
