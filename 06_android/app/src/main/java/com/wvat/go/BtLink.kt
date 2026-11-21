@@ -1,4 +1,4 @@
-package com.wvat.go
+﻿package com.wvat.go
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
@@ -55,7 +55,11 @@ class BtLink(
                 val s = try {
                     device.createRfcommSocketToServiceRecord(SPP_UUID)
                 } catch (e: Exception) {
-                    val m = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                    // 反射兜底：createRfcommSocket(int)。注意 Int::class.javaPrimitiveType
+                    // 在 Kotlin 里是 Class<Int>?，必须 !! 才能塞进 getMethod 的 vararg
+                    val intClass: Class<Int> = Int::class.javaPrimitiveType!!
+                    val m = device.javaClass.getMethod("createRfcommSocket", intClass)
+                    @Suppress("UNCHECKED_CAST")
                     m.invoke(device, 1) as BluetoothSocket
                 }
                 s.connect()                       // 阻塞，最长约 12 秒
@@ -78,7 +82,10 @@ class BtLink(
                 val br = BufferedReader(InputStreamReader(s.inputStream, Charsets.UTF_8))
                 while (running) {
                     val line = br.readLine() ?: break
-                    if (line.isNotEmpty()) onLine(line)
+                    if (line.isNotEmpty()) {
+                        android.util.Log.d("WVAT", "←RX $line")
+                        onLine(line)
+                    }
                 }
             } catch (_: Exception) {
                 // 断开、被拔电、模块掉线都会走到这里
@@ -100,6 +107,7 @@ class BtLink(
         return try {
             w.print(line)
             w.flush()
+            android.util.Log.d("WVAT", "→TX ${line.trim()}")
             true
         } catch (_: Exception) {
             false

@@ -3,113 +3,131 @@
 把 `02_gateway`（Python，跑在电脑上）的职责搬到手机上：
 **手表通过蓝牙连这台手机，手机就是原来的那台电脑。**
 
-> 参考实现：`ccch1mneyyy/dsh-Go`（DSH 的安卓客户端）。
-> 本工程只借鉴它的**分层思路**，代码全部自写——因为我们要的是"蓝牙网关"，
-> 它做的是"AI 对话客户端"，两者没有可以直接复用的模块。
+> 参考实现：`ccch1mneyyy/dsh-Go`（DSH 的安卓客户端）。只借鉴分层思路，
+> 代码全部自写——它做的是"AI 对话客户端"，我们要的是"蓝牙网关"。
 
 ---
 
-## 它解决的问题
+## 实测状态
 
-| 原来 | 现在 |
-|---|---|
-| 手表必须插 USB 线连电脑 | 手表连**手机**，手机放口袋里就行 |
-| 电脑上要跑 Python + vendor 依赖 | 一个 APK，零第三方依赖 |
-| 演示时拖着一根线 | 手表 + 充电宝 + 手机，**全程无线** |
+**已在一台华为 P40（HarmonyOS 4.0 / 底层 Android 10）上跑通全链路：**
 
-**协议一字不改**：手表固件里的 `OV+` 帧已经写好了，
-手机端只要"像原来那台电脑一样说话"，固件一行都不用动。
+```
+18:14:07  →TX OV+EV=TIME,18:14:07,2026-11-21     ← 授时
+18:14:07  ←RX OV+PONG                            ← 手表回应，双向通
+18:14:09  →TX OV+EV=WX,0,4   → 手表显示"晴 4℃"    ← 天气
+18:15:04  ←RX OV+AI=1,A02    → 手机切到下一首      ← 动作
+18:15:51  ←RX OV+AI=6,A04    → 音量 0%→6%→…→60%  ← 音量
+18:15:57  ←RX OV+AI=11,A03   → 已静音             ← 我困了
+```
+
+手表端同步变化：右上角链路点 `U`（USB）→ `B`（蓝牙）、时间自动校准、日期页显示天气。
 
 ---
 
-## 一期做了什么（当前状态）
+## 技术选型
 
-| 能力 | 状态 | 对应 PC 网关 |
+| 项 | 选择 | 理由 |
 |---|---|---|
-| 蓝牙 SPP 连接 HC-05 | ✅ | `SerialChannel` |
-| 指令解析 `OV+AI` / 回执 `OV+AR` | ✅ | `protocol.py` |
-| 授时（连上即发 + 每 30 秒） | ✅ | `time_event()` |
-| 心跳 `PING`/`PONG` + 掉线判定 | ✅ | `HEARTBEAT_SEC` |
-| 天气 `OV+EV=WX`（open-meteo） | ✅ | `weather.py` |
-| 白名单动作 A01~A07 | ✅ | `executor.py` |
-| REQ_ID 去重 | ✅ | `dedup` |
-| 语音（手机麦克风 + 识别） | ⬜ 二期 | `asr.py` |
-| AI 兜底（自由文本 → 动作） | ⬜ 三期 | `--llm` |
+| 语言 | Kotlin（**AGP 9.5.1 内置，无需 kotlin 插件**）| 零额外版本冲突 |
+| UI | 系统原生控件代码构建（不用 Compose / AppCompat）| 依赖少、构建快 |
+| 蓝牙 | `BluetoothSocket` + SPP UUID（经典蓝牙）| HC-05 走的就是 SPP |
+| 天气 | `HttpURLConnection` + open-meteo（免 key）| 不引第三方库 |
+| 动作 | `AudioManager` / `Intent` / `AlarmClock` | 全是系统 API |
 
-## 动作映射（手机和电脑能力不同，论文里要写清楚）
-
-| 码 | 动作 | 手机实现 | 与 PC 的差异 |
-|---|---|---|---|
-| A01 | 播放/暂停 | `dispatchMediaKeyEvent` | 一致 |
-| A02 | 下一首 | 同上 | 一致 |
-| A03 | 我困了 | **只能静音** | PC 能锁屏+关屏；手机要设备管理员 |
-| A04/A05 | 音量 ± | `AudioManager` | 一致 |
-| A06 | 打开资料 | 打开系统"文档"界面 | PC 是打开文件夹，**语义变了** |
-| A07 | 查状态 | 音量 + 天气 | 一致 |
+**零第三方依赖**——`app/build.gradle.kts` 里的 AndroidX 是模板自带，我们的代码没用到。
 
 ---
 
-## 怎么构建
+## 构建
 
-### 需要装一次 Android Studio
+### 方式一：Android Studio（推荐）
 
-本工程**不含** `gradle/wrapper`，首次打开时让 Android Studio 自己生成最省事。
+```
+File → Open → 选这个 06_android 目录
+等 Gradle sync 完成 → 点 ▶ Run
+```
 
-1. 装 [Android Studio](https://developer.android.com/studio)（约 4 GB，自带 JDK 17 和 SDK）
-2. `File → Open`，选这个 `06_android` 目录
-3. 它会提示"没有 Gradle wrapper / 是否使用 Gradle 8.x" → **同意**（会自动下载）
-4. 等 SDK 组件下载完（Android 14 / API 34 平台包）
-5. 手机用 USB 连电脑，开"开发者选项 → USB 调试"
-6. 点 ▶ Run
+环境要求（本工程已在下面这套上验证过）：
 
-> 首次构建要下载 Gradle + AGP，**联网约 5~10 分钟**。之后再构建就快了。
+```
+Android Studio AI-262（2026 版，内置 JDK 25）
+AGP 9.5.1 · Gradle 9.6.0 · compileSdk 37（Android 17）
+minSdk 24 · targetSdk 37
+```
 
-### 命令行（可选，装了 SDK 之后）
+⚠️ 首次打开会生成 `local.properties`（里面是 SDK 路径），**这个文件不要入库**。
 
-```bash
+### 方式二：命令行（我验证过可用）
+
+```powershell
+$env:JAVA_HOME = 'D:\Android\jbr'          # 用 Android Studio 自带的 JDK
 cd 06_android
-# 第一次需要生成 wrapper
-gradle wrapper --gradle-version 8.5
-./gradlew assembleDebug
+.\gradlew.bat assembleDebug
 # 产物：app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ---
 
-## 手机上的使用步骤
+## 手机侧准备
 
 ```
-① 系统设置 → 蓝牙 → 配对 HC-05（配对码 1234）
-② 打开 WVAT Go → 授予蓝牙权限
-③ 点「连接手表」→ 选 HC-05
-④ 日志出现「已连接」→ 手表右上角的链路点应该亮起来
+① 设置 → 关于手机 → 连点「版本号」7 次 → 开发者选项
+② 开发者选项 → USB 调试 = 开
+   （华为还要开「仅充电模式下允许 ADB 调试」，否则不弹授权框）
+③ 插 USB → 通知栏把「仅充电」改成【传输文件】→ 手机上点【允许 USB 调试】
+④ 系统蓝牙里配对 HC-05（配对码 1234）
+⑤ 打开 WVAT Go → 点【连接手表】→ 选 HC-05
 ```
-
-### 日志里应该看到
-
-```
-网关已启动：连上即授时 · 20 秒心跳 · 5 分钟天气
-← #1 A02                 ← 手表按了「下一首」
-→ OK 已切到下一首
-→ 天气 类别0 5℃          ← 天气推给手表
-```
-
-### 手表端应该看到
-
-- 右上角链路点：**USB 变蓝牙**（`B`）
-- 日期页：天气图标 + 温度
-- 点意图格：回执亮绿点
 
 ---
 
-## 已知限制（都是刻意留到后面）
+## 排错：远程看日志
+
+App 里所有日志同时打到系统日志，**不用截图**：
+
+```powershell
+adb logcat -s WVAT:V
+```
+
+输出形如：
+
+```
+I WVAT : 已连接：HC-05
+I WVAT : 网关已启动：连上即授时 · 20 秒心跳 · 5 分钟天气
+D WVAT : →TX OV+EV=TIME,18:14:07,2026-11-21
+D WVAT : ←RX OV+PONG
+D WVAT : ←RX OV+AI=1,A02
+I WVAT : → OK 已切到下一首
+```
+
+`→TX` 是发给手表的原始帧，`←RX` 是从手表收到的原始帧。
+
+---
+
+## 动作映射（手机 vs 电脑的能力差异）
+
+| 码 | 动作 | 手机实现 | 与 PC 的差异 |
+|---|---|---|---|
+| A01 | 播放/暂停 | `dispatchMediaKeyEvent` | 一致 |
+| A02 | 下一首 | 同上 | 一致 |
+| A03 | 我困了 | **只能静音** | PC 能锁屏+关屏；手机要设备管理员权限 |
+| A04/A05 | 音量 ± | `AudioManager` | 一致 |
+| A06 | 打开资料 | 打开系统"文档"界面 | PC 打开文件夹，**语义变化** |
+| A07 | 查状态 | 音量 + 天气 | 一致 |
+| A08 | 语音 | **未实现**（二期：手机麦克风 + 识别）| — |
+
+---
+
+## 已知限制与后续
 
 | 限制 | 原因 | 计划 |
 |---|---|---|
-| 息屏后可能断开 | 没做成前台服务 | 二期加 `ForegroundService` |
-| 自由文本一律回 `ERR` | AI 兜底未接 | 三期接 LLM |
-| 城市写死北京 | 没做设置页 | 二期加设置页 |
-| A03 不能关屏 | 需要设备管理员权限 | 写进论文的"平台能力差异" |
+| 息屏后可能被系统杀掉 | 没有前台服务 | 二期加 `ForegroundService` |
+| `A08 语音` 返回 ERR | 语音未接 | 二期 |
+| 自由文本 `T,...` 返回 ERR | AI 兜底未接 | 三期接 LLM |
+| 城市写死北京 | 没有设置页 | 二期加设置页（改 `Weather.kt` 的 lat/lon）|
+| 手表断电后时间归零 | FryPi **没有 VBAT 电池**，RTC 备份域掉电就清 | 不是 App 的问题；连上手机 30 秒内自动对时 |
 
 ---
 
@@ -117,21 +135,19 @@ gradle wrapper --gradle-version 8.5
 
 ```
 06_android/
-├── settings.gradle.kts
-├── build.gradle.kts
-├── gradle.properties
-├── .gitignore
-├── README.md
+├── settings.gradle.kts / build.gradle.kts / gradle.properties
+├── gradle/libs.versions.toml          ← AGP 版本集中在这里
+├── gradle/wrapper/                    ← Gradle 9.6.0
 └── app/
     ├── build.gradle.kts
     └── src/main/
-        ├── AndroidManifest.xml
-        ├── res/values/strings.xml
+        ├── AndroidManifest.xml        ← 蓝牙/网络权限 + MainActivity
+        ├── res/                        ← 图标与主题（模板生成）
         └── java/com/wvat/go/
-            ├── OvProtocol.kt    OV+ 帧解析与生成（对齐 protocol.py）
-            ├── BtLink.kt        蓝牙 SPP 连接/收发/断线
-            ├── Weather.kt       open-meteo 取天气（对齐 weather.py）
-            ├── Actions.kt       A01~A07 的动作执行
-            ├── GatewayCore.kt   周期任务 + 指令分发（对齐 gateway.py）
-            └── MainActivity.kt  连接状态、日志、选设备
+            ├── OvProtocol.kt   OV+ 帧解析与生成（对齐 protocol.py）
+            ├── BtLink.kt       蓝牙 SPP 连接/收发/断线
+            ├── Weather.kt      open-meteo 取天气（对齐 weather.py）
+            ├── Actions.kt      A01~A07 的动作执行
+            ├── GatewayCore.kt  授时/心跳/天气/去重/分发（对齐 gateway.py）
+            └── MainActivity.kt 连接状态、日志、选设备
 ```

@@ -67,12 +67,14 @@ object Weather {
                         "?latitude=$lat&longitude=$lon" +
                         "&current=temperature_2m,weather_code&timezone=auto"
                 )
-                conn = (url.openConnection() as HttpURLConnection).apply {
+                // 用非空的局部变量，避免可空 var 的智能转换问题
+                val c = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = TIMEOUT_MS
                     readTimeout = TIMEOUT_MS
                     setRequestProperty("User-Agent", "WVATGo/0.1")
                 }
-                val text = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                conn = c
+                val text = c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                 val cur = JSONObject(text).getJSONObject("current")
                 val code = cur.getInt("weather_code")
                 val t = cur.getDouble("temperature_2m")

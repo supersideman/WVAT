@@ -1,4 +1,4 @@
-package com.wvat.go
+﻿package com.wvat.go
 
 import android.Manifest
 import android.app.Activity
@@ -135,6 +135,9 @@ class MainActivity : Activity() {
 
     // ── 日志 ──────────────────────────────────────────────
     private fun appendLog(msg: String) {
+        // 同时打到系统日志：`adb logcat -s WVAT` 就能远程看到，
+        // 不用每次都截图界面（我自己也是这么排错的）
+        android.util.Log.i("WVAT", msg)
         logLines.addLast(msg)
         while (logLines.size > 200) logLines.removeFirst()
         logView.text = logLines.joinToString("\n")

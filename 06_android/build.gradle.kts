@@ -1,5 +1,4 @@
-// 顶层构建：只声明插件版本，模块里再 apply。
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
 plugins {
-    id("com.android.application") version "8.1.4" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+    alias(libs.plugins.android.application) apply false
 }
