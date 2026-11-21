@@ -9,6 +9,7 @@
 #include "ui_theme.h"
 #include "ui_icons.h"
 #include "ui_drawer.h"
+#include "ui_date.h"
 #include "ui_settings.h"
 #include "ui_status.h"
 #include "ui_rec.h"
@@ -168,8 +169,8 @@ static void on_bg_released(lv_event_t *e)
 
     if (dx <= -UI_PAGE_SWIPE_PX) {          /* 向左滑 → 右页：设置 */
         ui_settings_open();
-    } else if (dx >= UI_PAGE_SWIPE_PX) {    /* 向右滑 → 左页：更多指令 */
-        ui_drawer_open();
+    } else if (dx >= UI_PAGE_SWIPE_PX) {    /* 向右滑 → 左页：日期 */
+        ui_date_open();
     }
 }
 

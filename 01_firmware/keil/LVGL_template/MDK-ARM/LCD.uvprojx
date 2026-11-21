@@ -673,6 +673,11 @@
               <FilePath>..\User\GUI\ui_icons.c</FilePath>
             </File>
             <File>
+              <FileName>ui_date.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\GUI\ui_date.c</FilePath>
+            </File>
+            <File>
               <FileName>ui_settings.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\User\GUI\ui_settings.c</FilePath>

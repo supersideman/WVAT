@@ -38,6 +38,21 @@ const char *clock_time_str(void);
 /** 当前日期的字符串形式："MM/DD"（未设置时返回 "--/--"） */
 const char *clock_date_str(void);
 
+/** 当前"日"的两位字符串："21"（未设置时返回 "--"）——日期页的大字 */
+const char *clock_day_str(void);
+
+/** 当前"年/月"的字符串："2026/11"（未设置时返回 "----/--"） */
+const char *clock_year_month_str(void);
+
+/** 星期的英文三字母缩写："MON".."SUN"（未设置时返回 "---"）
+ *  ⚠️ 由年月日算出来（Sakamoto 算法），**不读 RTC 的 weekday 字段**——
+ *     那个字段我们的授时流程从来没写过，读出来是 0，不可信。 */
+const char *clock_weekday_str(void);
+
+/** 立刻刷新缓存并推给所有页面（主界面/锁屏/日期页）。
+ *  给"页面刚显示出来、想马上是最新值"的场合用（比如 ui_date_open）。 */
+void clock_publish(void);
+
 #ifdef __cplusplus
 }
 #endif

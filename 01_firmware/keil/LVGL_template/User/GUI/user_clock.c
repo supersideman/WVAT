@@ -23,6 +23,7 @@
 #include "main.h"
 #include "ui_lock.h"
 #include "ui_main.h"
+#include "ui_date.h"
 
 /* RTC 写保护解锁/上锁的固定魔数（参考 RM0383 §26.3.5）*/
 #define RTC_KEY1  0xCAu
@@ -37,6 +38,9 @@ static bool s_time_set = false;
 
 static char s_time_str[8] = "--:--";
 static char s_date_str[8] = "--/--";
+static char s_day_str[4]  = "--";
+static char s_ym_str[10]  = "----/--";
+static char s_wd_str[4]   = "---";
 
 /* ───────────────── 小工具 ───────────────── */
 
@@ -124,6 +128,28 @@ bool clock_is_set(void)
     return s_rtc_ok && s_time_set;
 }
 
+/* ───────────────── 日期 → 星期 ───────────────── */
+
+/**
+ * 由年月日算星期（Sakamoto 算法），返回 0=周日 … 6=周六。
+ * 为什么不用 RTC->DR 里的 weekday 字段：我们的授时流程只写时间与年月日，
+ * 那个字段一直是 0，读出来永远同一天；所以星期一律由日期算。
+ */
+static int weekday_from_date(int y, int m, int d)
+{
+    static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+    if (m < 3) y -= 1;
+    int w = (y + y / 4 - y / 100 + y / 400 + t[m - 1] + d) % 7;
+    return (w < 0) ? (w + 7) : w;
+}
+
+/** RTC 的 weekday 字段要 1=周一 … 7=周日 */
+static uint8_t weekday_rtc_field(int y, int m, int d)
+{
+    int w = weekday_from_date(y, m, d);      /* 0=周日 */
+    return (uint8_t)((w == 0) ? 7 : w);
+}
+
 /* ───────────────── 写时间 ───────────────── */
 
 /** 新时间与当前 RTC 时间是否已足够接近（避免每 30 秒重复写 + 刷日志）*/
@@ -167,13 +193,16 @@ void clock_set(uint16_t year, uint8_t month, uint8_t day,
         return;
     }
 
-    /* BCD 编码写入：TR = [时][分][秒]，DR = [年][月][日] */
+    /* BCD 编码写入：TR = [时][分][秒]，DR = [年][月][日] + weekday
+       顺带把 weekday 字段写上（1=周一…7=周日）——以前没写过，
+       一直是 0，虽然界面不用它（我们用日期算星期），但硬件字段该是对的。 */
+    uint8_t wd = weekday_rtc_field((int)year, month, day);
     RTC->TR = ((uint32_t)bin2bcd(hour)   << 16) |
               ((uint32_t)bin2bcd(minute) << 8)  |
                (uint32_t)bin2bcd(second);
     RTC->DR = ((uint32_t)bin2bcd((uint8_t)(year % 100u)) << 16) |
               ((uint32_t)bin2bcd(month)                  << 8)  |
-               (uint32_t)bin2bcd(day);
+               (uint32_t)bin2bcd(day) | (uint32_t)wd;
 
     rtc_exit_init();
     rtc_lock();
@@ -189,12 +218,18 @@ void clock_set(uint16_t year, uint8_t month, uint8_t day,
 
 const char *clock_time_str(void) { return s_time_str; }
 const char *clock_date_str(void) { return s_date_str; }
+const char *clock_day_str(void)  { return s_day_str; }
+const char *clock_year_month_str(void) { return s_ym_str; }
+const char *clock_weekday_str(void)    { return s_wd_str; }
 
 static void clock_refresh_cache(void)
 {
     if (!clock_is_set()) {
         snprintf(s_time_str, sizeof(s_time_str), "--:--");
         snprintf(s_date_str, sizeof(s_date_str), "--/--");
+        snprintf(s_day_str,  sizeof(s_day_str),  "--");
+        snprintf(s_ym_str,   sizeof(s_ym_str),   "----/--");
+        snprintf(s_wd_str,   sizeof(s_wd_str),   "---");
         return;
     }
 
@@ -207,10 +242,22 @@ static void clock_refresh_cache(void)
     uint8_t hr  = bcd2bin((uint8_t)((tr >> 16) & 0x3Fu));
     uint8_t day = bcd2bin((uint8_t)(dr & 0x3Fu));
     uint8_t mon = bcd2bin((uint8_t)((dr >> 8) & 0x1Fu));
+    uint8_t yr  = bcd2bin((uint8_t)((dr >> 16) & 0xFFu));
 
     (void)sec;                                  /* 界面只显示到分钟 */
     snprintf(s_time_str, sizeof(s_time_str), "%02u:%02u", hr, min);
     snprintf(s_date_str, sizeof(s_date_str), "%02u/%02u", mon, day);
+
+    /* 日期页用：大"日"、年/月、英文星期 */
+    static const char *const k_wd[7] = {"SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"};
+    int yyyy = 2000 + (int)yr;
+    snprintf(s_day_str, sizeof(s_day_str), "%02u", day);
+    snprintf(s_ym_str,  sizeof(s_ym_str),  "%04d/%02u", yyyy, mon);
+    if (mon >= 1u && mon <= 12u && day >= 1u && day <= 31u) {
+        snprintf(s_wd_str, sizeof(s_wd_str), "%s", k_wd[weekday_from_date(yyyy, mon, day)]);
+    } else {
+        snprintf(s_wd_str, sizeof(s_wd_str), "---");
+    }
 }
 
 /* ───────────────── 界面刷新 ───────────────── */
@@ -219,15 +266,20 @@ static void clock_refresh_cache(void)
 static void clock_timer_cb(lv_timer_t *t)
 {
     (void)t;
-    clock_refresh_cache();
-    ui_main_set_time(s_time_str, s_date_str);
-    ui_lock_set_time(s_time_str, s_date_str);
+    clock_publish();
 }
 
-void clock_start_ui_timer(void)
+/** 刷新缓存并推给所有页面（主界面 / 锁屏 / 日期页） */
+void clock_publish(void)
 {
     clock_refresh_cache();
     ui_main_set_time(s_time_str, s_date_str);
     ui_lock_set_time(s_time_str, s_date_str);
+    ui_date_set_text(s_day_str, s_ym_str, s_wd_str);
+}
+
+void clock_start_ui_timer(void)
+{
+    clock_publish();
     lv_timer_create(clock_timer_cb, 1000, NULL);   /* 每 1 秒刷新一次 */
 }
